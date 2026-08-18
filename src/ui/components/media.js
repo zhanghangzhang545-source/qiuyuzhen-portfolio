@@ -51,13 +51,45 @@ export function imgEl(value, className, alt = '', opts = {}) {
 
   if (!src) {
     e.src = neutralFail(opts.w, opts.h); // 无来源：直接给中性占位
-  } else {
-    e.src = src;
-    e.addEventListener('error', () => {
-      if (e.dataset.failed) return;       // 防止兜底图再次触发 error 造成死循环
-      e.dataset.failed = '1';
-      e.src = neutralFail(opts.w, opts.h);
-    });
+    return e;
   }
+
+  // 容错策略：仅对「瞬时网络 / CDN 抖动」做有限重试；硬错误（404/403 等）直接兜底，绝不无限重试。
+  // 设计依据：线上同时加载 142 张图时，少数请求会瞬时超时 / ERR_FAILED / SSL EOF，若首次 error 即永久
+  // 占位，会出现「每次刷新坏不同的图」。这里先探测真实状态，确认可恢复才重试。
+  const MAX_RETRY = 2;
+  let attempts = 0;
+
+  const showFallback = () => {
+    if (e.dataset.failed) return;          // 防止中性占位图再次触发 error 造成死循环
+    e.dataset.failed = '1';
+    e.src = neutralFail(opts.w, opts.h);   // 最终兜底占位（不含任何 DEMO 字样）
+  };
+
+  const retry = (n) => {
+    if (e.dataset.failed) return;
+    const sep = src.includes('?') ? '&' : '?';
+    // 退避 + 缓存击穿：绕过可能被缓存的失败响应；瞬时 CDN 抖动通常下一次即恢复
+    setTimeout(() => {
+      if (e.dataset.failed) return;
+      e.src = `${src}${sep}_r=${n}`;
+    }, 250 * n);
+  };
+
+  e.addEventListener('error', () => {
+    if (e.dataset.failed) return;
+    if (attempts >= MAX_RETRY) { showFallback(); return; }
+    attempts++;
+    const n = attempts;
+    // 探测真实状态：2xx=资源可用（之前是瞬时抖动）→ 重试；4xx/5xx=资源确缺失 → 直接兜底；
+    // 网络错误 / 超时（CDN 抖动）→ 视为瞬时，重试。
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 3000);
+    fetch(src, { method: 'HEAD', cache: 'no-store', signal: ctrl.signal })
+      .then((r) => { clearTimeout(timer); r.ok ? retry(n) : showFallback(); })
+      .catch(() => { clearTimeout(timer); retry(n); }); // 网络/CDN/超时错误 → 按瞬时重试
+  });
+
+  e.src = src;
   return e;
 }
