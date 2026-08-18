@@ -57,27 +57,32 @@ export function imgEl(value, className, alt = '', opts = {}) {
   // 容错策略：仅对「瞬时网络 / CDN 抖动」做有限重试；硬错误（404/403 等）直接兜底，绝不无限重试。
   // 设计依据：线上同时加载 142 张图时，少数请求会瞬时超时 / ERR_FAILED / SSL EOF，若首次 error 即永久
   // 占位，会出现「每次刷新坏不同的图」。这里先探测真实状态，确认可恢复才重试。
+  // 额外 watchdog：若请求长时间挂起（既无 load 也无 error，极端拥塞下可能出现「永久空白」），
+  // 超时后按失败路径处理，避免图片长期空白不显示。
   const MAX_RETRY = 2;
+  const WATCH_MS = 10000;
   let attempts = 0;
+  let done = false; // 已成功加载或已显示兜底占位
 
   const showFallback = () => {
-    if (e.dataset.failed) return;          // 防止中性占位图再次触发 error 造成死循环
+    if (done) return;                         // 防止中性占位图再次触发 error 造成死循环
+    done = true;
     e.dataset.failed = '1';
-    e.src = neutralFail(opts.w, opts.h);   // 最终兜底占位（不含任何 DEMO 字样）
+    e.src = neutralFail(opts.w, opts.h);      // 最终兜底占位（不含任何 DEMO 字样）
   };
 
   const retry = (n) => {
-    if (e.dataset.failed) return;
+    if (done) return;
     const sep = src.includes('?') ? '&' : '?';
     // 退避 + 缓存击穿：绕过可能被缓存的失败响应；瞬时 CDN 抖动通常下一次即恢复
     setTimeout(() => {
-      if (e.dataset.failed) return;
-      e.src = `${src}${sep}_r=${n}`;
+      if (done) return;
+      setSrc(`${src}${sep}_r=${n}`);   // 重新发起请求并重启 watchdog
     }, 250 * n);
   };
 
-  e.addEventListener('error', () => {
-    if (e.dataset.failed) return;
+  const handleFail = () => {
+    if (done) return;
     if (attempts >= MAX_RETRY) { showFallback(); return; }
     attempts++;
     const n = attempts;
@@ -88,8 +93,23 @@ export function imgEl(value, className, alt = '', opts = {}) {
     fetch(src, { method: 'HEAD', cache: 'no-store', signal: ctrl.signal })
       .then((r) => { clearTimeout(timer); r.ok ? retry(n) : showFallback(); })
       .catch(() => { clearTimeout(timer); retry(n); }); // 网络/CDN/超时错误 → 按瞬时重试
-  });
+  };
 
-  e.src = src;
+  // 统一入口：设置 src 并（重新）启动 watchdog，确保每次请求（含重试）都有挂起保护
+  let watch = null;
+  const armWatch = () => {
+    if (watch) clearTimeout(watch);
+    watch = setTimeout(() => {
+      if (done) return;
+      if (attempts >= MAX_RETRY) showFallback();
+      else handleFail();           // 挂起超时 → 按失败路径（重试 / 兜底）
+    }, WATCH_MS);
+  };
+  const setSrc = (url) => { e.src = url; armWatch(); };
+
+  e.addEventListener('error', handleFail);
+  e.addEventListener('load', () => { done = true; if (watch) clearTimeout(watch); });
+
+  setSrc(src);                     // 首次发起请求并启动 watchdog
   return e;
 }
