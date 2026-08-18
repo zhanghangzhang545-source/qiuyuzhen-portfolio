@@ -1,0 +1,343 @@
+/* ============================================================
+   Pages — 首页 / 作品 / 详情 / 漫画阅读 / 个人介绍 / 后台  (V3)
+   视觉策略：深色 Hero（作品为视觉底层） → 暖白精选（编辑杂志编排）
+   → 深色漫画专区（2026 作主项目） → 暖白履历；section 按内容自然增长。
+   ============================================================ */
+
+/* —— 首页 · 第一屏：深色，真实作品《旅途》为视觉底层（桌面约 78vh，作品永远是第一焦点） —— */
+.hero {
+  position: relative; display: flex; align-items: flex-end;
+  overflow: hidden; background: var(--ink); color: var(--ink-on-dark);
+}
+@media (min-width: 721px) { .hero { min-height: 76vh; } }
+.hero__media { position: absolute; inset: 0; z-index: 0; }
+.hero__img { width: 100%; height: 100%; object-fit: cover; object-position: center 42%; }
+/* 降低深色蒙版强度：仅局部压暗文字区（底部 + 左侧），让《旅途》原作色彩明显恢复 */
+.hero__scrim {
+  position: absolute; inset: 0; z-index: 1;
+  background:
+    linear-gradient(to top,
+      rgba(33,27,20,.66) 0%,
+      rgba(33,27,20,.32) 20%,
+      rgba(33,27,20,.05) 42%,
+      rgba(33,27,20,0) 55%),
+    linear-gradient(to right,
+      rgba(33,27,20,.30) 0%,
+      rgba(33,27,20,0) 48%);
+}
+.hero__inner {
+  position: relative; z-index: 2; width: 100%;
+  display: flex; align-items: flex-end; justify-content: space-between;
+  gap: var(--s5); flex-wrap: wrap;
+  padding: var(--pad-x); padding-bottom: clamp(28px, 6vh, 64px);
+}
+.hero__copy { max-width: 30ch; }
+.hero__kicker {
+  display: flex; align-items: center; gap: var(--s3); margin-bottom: var(--s4);
+  font-size: 12px; letter-spacing: .22em; text-transform: uppercase; color: var(--ink-on-dark-2);
+}
+.hero__name {
+  font-family: var(--font-display); font-weight: 500; line-height: .88; letter-spacing: .01em;
+  font-size: clamp(48px, 9vw, 132px);
+}
+.hero__name span { display: block; }
+.hero__cn { font-family: var(--font-display); font-size: clamp(22px, 2.6vw, 34px); font-weight: 500; margin-top: var(--s3); color: var(--ink-on-dark); }
+.hero__lead { font-family: var(--font-sans); font-size: clamp(14px, 1.3vw, 16px); line-height: 1.7; color: var(--ink-on-dark-2); margin-top: var(--s4); max-width: 34ch; }
+.hero__scroll {
+  display: inline-flex; align-items: center; gap: 10px; align-self: flex-end;
+  font-size: 13px; letter-spacing: .18em; text-transform: uppercase; color: var(--ink-on-dark);
+  border-bottom: 1px solid var(--ink-on-dark-2); padding-bottom: 4px;
+}
+.hero__scroll span { transition: transform .2s ease; }
+.hero__scroll:hover { color: var(--caramel); border-color: var(--caramel); }
+.hero__scroll:hover span { transform: translateY(3px); }
+
+/* 区段标题（编辑式：小字 eyebrow + 衬线标题 + 细线） */
+.home-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--s4); flex-wrap: wrap; margin-bottom: var(--s6); }
+.home-head .eyebrow { display: block; margin-bottom: var(--s2); }
+.home-head h2 { font-family: var(--font-display); font-size: clamp(28px, 3.4vw, 42px); font-weight: 500; }
+.home-head a { font-size: 14px; color: var(--ink-2); transition: color .15s ease; }
+.home-head a:hover { color: var(--caramel); }
+.home-head--light h2, .home-head--light .eyebrow { color: var(--ink-on-dark); }
+.home-head--light a { color: var(--ink-on-dark-2); }
+.home-head--light a:hover { color: var(--caramel); }
+
+/* —— 精选：独立视觉段落（每段独立结束，互不决定对方高度） —— */
+.feature { display: flex; flex-direction: column; gap: var(--s5); }
+.feat-link { display: block; }
+.feat-img { width: 100%; height: auto; display: block; }
+
+/* 段落 1：插画专题整幅横幅（已并入 home.js 的 feat-link 整幅编排，不再使用右栏空信息网格） */
+
+/* 段落 2：梦里的风景 重组为「梦境系列」双图并置（主图 + 一张相关真实作品），两列均被图像填满，下方一行极简说明；不再出现左文右图长留空 */
+.feat-portrait { display: block; }
+.feat-portrait__pair { display: grid; grid-template-columns: 1.2fr 1fr; gap: var(--s5); align-items: start; }
+.feat-portrait__pair .work-card__cap { margin-top: var(--s3); }
+.feat-portrait__note { margin-top: var(--s5); display: flex; flex-direction: column; gap: 6px; }
+.feat-portrait__note .idx { margin-bottom: 2px; }
+.feat-portrait__note h3 { font-family: var(--font-display); font-size: clamp(24px, 2.6vw, 34px); font-weight: 500; line-height: 1.15; }
+.feat-portrait__note p { color: var(--ink-3); margin-top: 4px; max-width: 62ch; }
+
+/* 段落 3：2026 代代木毕业设计 — 漫画专题块（大封面 + 3 张真实内页 + 真实项目说明；封面明显大于内页，强化大小关系） */
+.feat-comic { display: grid; grid-template-columns: 40% 1fr; gap: var(--s6); align-items: start; }
+.feat-comic__cover { min-width: 0; }
+.feat-comic__body { min-width: 0; }
+.feat-comic__title { font-family: var(--font-display); font-size: clamp(24px, 2.4vw, 34px); font-weight: 500; margin-top: var(--s3); }
+.feat-comic__proj { font-size: 13px; letter-spacing: .04em; color: var(--caramel); margin-top: 8px; font-weight: 600; }
+.feat-comic__pages { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--s3); margin-top: var(--s4); align-self: start; }
+.feat-comic__meta { font-size: 12px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); margin-top: 12px; }
+
+/* 段落 4a：一大一小错位组合《献上战舞》+《拐弯处的光》 */
+.feat-pair { display: grid; grid-template-columns: 1.45fr 1fr; gap: var(--s6); align-items: start; }
+.feat-pair__small { margin-top: var(--s8); }
+.feat-pair__small .work-card__cap { max-width: 26ch; }
+
+/* 专题 C：综合创作 —— 献上战舞（大，横向）+ 两幅油画（竖排）按真实比例配平，左右底部对齐成完整矩形 */
+.composite { display: grid; grid-template-columns: 4fr 1fr; gap: var(--s6); align-items: start; }
+.composite__main { display: block; }
+.composite__oils { display: flex; flex-direction: column; gap: var(--s5); min-width: 0; }
+.composite__oil { display: block; }
+.composite__oil .work-card__cap { margin-top: var(--s3); }
+
+/* 段落 4b：2021 大学毕业设计 — 横向漫画预览（封面 + 内页缩略 + 标题） */
+.feat-comicprev { display: grid; grid-template-columns: 110px 1fr auto; gap: var(--s5); align-items: center; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); padding: var(--s5) 0; }
+.feat-comicprev__cover { width: 110px; }
+.feat-comicprev__pages { display: flex; gap: var(--s3); overflow: hidden; }
+.feat-comicprev__pages img { width: 96px; height: auto; flex: none; }
+.feat-comicprev__title { font-family: var(--font-display); font-size: clamp(20px, 2vw, 28px); font-weight: 500; }
+.feat-comicprev__meta { font-size: 12px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); margin-top: 6px; }
+
+/* —— 漫画专区（深色出版物目录感；2026 作主专题，其余为极简目录行） —— */
+.comics__head { display: flex; align-items: flex-end; justify-content: space-between; gap: var(--s4); flex-wrap: wrap; margin-bottom: var(--s6); }
+.comics__head h2 { font-family: var(--font-display); font-size: clamp(28px, 3.4vw, 42px); font-weight: 500; }
+.comics__feature { display: grid; grid-template-columns: 360px 1fr; gap: var(--s7); align-items: start; margin-bottom: var(--gap-section); }
+.comics__cover { width: 100%; overflow: hidden; background: var(--espresso-2); }
+.comics__cover img { width: 100%; height: auto; display: block; }
+.comics__feature-body { display: flex; flex-direction: column; gap: var(--s5); min-width: 0; }
+.comics__feature-meta { display: flex; flex-direction: column; align-items: flex-start; gap: var(--s3); }
+.comics__feature-title { font-family: var(--font-display); font-size: clamp(28px, 3.2vw, 44px); font-weight: 500; color: var(--ink-on-dark); line-height: 1.04; }
+.comics__feature-proj { font-size: 14px; letter-spacing: .02em; color: var(--caramel); font-weight: 600; line-height: 1.4; }
+.comics__feature-proj--en { font-family: var(--font-mono); letter-spacing: .06em; text-transform: uppercase; opacity: .92; font-size: 13px; }
+.comics__feature-sub { font-size: 12px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-on-dark-2); }
+.comics__pages { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--s4); background: var(--espresso-2); }
+.comics__pages img { width: 100%; height: auto; display: block; }
+
+/* 其余 4 部：极简目录行（编号 / 年份 / 标题 / 页数 / 小封面） */
+.comics__catalog { border-top: 1px solid var(--line-dark); }
+.comic-cat { display: grid; grid-template-columns: 44px 72px 1fr auto; gap: var(--s5); align-items: center; padding: var(--s4) 0; border-bottom: 1px solid var(--line-dark); transition: padding-left .2s ease; opacity: .82; }
+.comic-cat:hover { padding-left: var(--s3); opacity: 1; }
+.comic-cat__num { font-family: var(--font-mono); font-size: 14px; color: var(--ink-on-dark-2); }
+.comic-cat__cover { width: 60px; overflow: hidden; background: var(--espresso-2); }
+.comic-cat__cover img { width: 100%; height: auto; display: block; }
+.comic-cat__title { font-family: var(--font-display); font-size: clamp(16px, 1.6vw, 21px); font-weight: 500; color: var(--ink-on-dark-2); line-height: 1.2; }
+.comic-cat__meta { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-on-dark-2); white-space: nowrap; opacity: .8; }
+
+/* 关于预告（暖白，纯文字 + 数据，紧凑） */
+.intro-teaser { display: grid; grid-template-columns: 1.2fr 1fr; gap: var(--s7); align-items: center; }
+.intro-teaser h2 { font-family: var(--font-display); font-size: clamp(30px, 3.6vw, 46px); font-weight: 500; margin: var(--s3) 0 var(--s4); }
+.intro-teaser__stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--s5); border-left: 1px solid var(--line); padding-left: var(--s7); }
+.intro-teaser__num { font-size: clamp(40px, 5vw, 72px); line-height: 1; color: var(--ink); }
+.intro-teaser__label { font-size: 13px; color: var(--ink-3); margin-top: 8px; line-height: 1.5; }
+
+/* 作品分类索引（极简文字入口） */
+.catindex { display: grid; grid-template-columns: repeat(3, 1fr); border-top: 1px solid var(--line); }
+.catindex__item { display: flex; flex-direction: column; gap: 8px; padding: var(--s6) var(--s5) var(--s6) 0; border-right: 1px solid var(--line); transition: padding-left .2s ease; }
+.catindex__item:last-child { border-right: 0; }
+.catindex__item:hover { padding-left: var(--s3); }
+.catindex__name { font-family: var(--font-display); font-size: clamp(26px, 2.8vw, 36px); font-weight: 500; }
+.catindex__count { font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: var(--ink-3); }
+.catindex__bar { height: 2px; width: 36px; background: var(--cat, var(--ink-3)); margin-top: var(--s2); transition: width .25s ease; }
+.catindex__item:hover .catindex__bar { width: 64px; }
+
+/* —— 作品列表页 —— */
+.page-head { display: flex; align-items: flex-end; justify-content: space-between; gap: var(--s4); flex-wrap: wrap; margin-bottom: var(--s6); padding-bottom: var(--s4); border-bottom: 1px solid var(--line); }
+.page-head h1 { font-family: var(--font-display); font-size: clamp(40px, 6vw, 72px); font-weight: 500; line-height: .98; }
+.page-head .count { color: var(--ink-3); font-size: 14px; letter-spacing: .06em; }
+
+/* 证书：克制网格（视觉权重低于艺术作品） */
+.cert-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--s5); }
+.cert-grid .work-card__title { font-family: var(--font-sans); font-size: 15px; font-weight: 500; }
+
+/* —— 作品库 V6：统一章节系统（三种媒介共用：编号 / 层级 / 字号 / 边距 / 分割一致） —— */
+.works-groups { display: flex; flex-direction: column; gap: var(--gap-section); }
+.works-chapter { border-top: 2px solid var(--ink); padding-top: var(--s5); }
+.works-chapter__num { font-family: var(--font-mono); font-size: clamp(13px, 1.3vw, 15px); letter-spacing: .14em; color: var(--caramel); font-weight: 600; }
+.works-chapter__head { display: flex; align-items: flex-end; justify-content: space-between; gap: var(--s5); margin-top: var(--s3); margin-bottom: var(--s5); }
+.works-chapter__en { display: block; font-size: 12px; letter-spacing: .26em; text-transform: uppercase; color: var(--ink-3); font-weight: 600; margin-bottom: 10px; }
+.works-chapter__title { font-family: var(--font-display); font-size: clamp(30px, 3.6vw, 48px); font-weight: 500; line-height: 1; }
+.works-chapter__meta { display: flex; align-items: baseline; gap: var(--s5); white-space: nowrap; }
+.works-chapter__count { color: var(--ink-3); font-size: 14px; letter-spacing: .06em; }
+.works-chapter__link { font-size: 14px; }
+
+/* 插画 Editorial：精选放大（大）+ 2 列瀑布流（中等辅助）+ 整幅横图节奏点（小） */
+.illu-banner { margin-bottom: var(--s7); }
+.illu-banner__media { width: 100%; }
+.illu-banner__media img, .illu-banner__media .feat-img { width: 100%; height: auto; display: block; }
+.illu-banner__cap { display: flex; align-items: flex-end; justify-content: space-between; gap: var(--s5); margin-top: var(--s4); }
+.illu-banner__title { display: flex; align-items: baseline; gap: var(--s4); flex-wrap: wrap; }
+.illu-banner__title .work-card__title { font-size: clamp(22px, 2.4vw, 32px); }
+.illu-banner__tag { flex: none; }
+
+.illu-pair { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s7); align-items: start; margin-bottom: var(--s7); }
+.illu-pair__main { align-self: start; }
+.illu-pair__main img, .illu-pair__main .feat-img { width: 100%; height: auto; display: block; }
+.illu-pair__side { align-self: stretch; display: flex; flex-direction: column; min-width: 0; }
+.illu-pair__img { display: block; }
+.illu-pair__img img, .illu-pair__img .feat-img { width: 100%; height: auto; display: block; }
+.illu-pair__fill { margin-top: auto; padding-top: var(--s4); }
+.illu-pair__fill .work-card__title { font-size: clamp(20px, 2vw, 28px); }
+
+.illu-accent { margin: var(--s7) 0; }
+.illu-accent__media { width: 100%; }
+.illu-accent__media img, .illu-accent__media .feat-img { width: 100%; height: auto; display: block; }
+.illu-accent__cap { display: flex; align-items: baseline; justify-content: space-between; gap: var(--s5); margin-top: var(--s4); }
+.illu-accent__cap .work-card__title { font-size: clamp(18px, 1.8vw, 24px); }
+
+.illu-masonry { column-count: 2; column-gap: var(--s6); margin-bottom: var(--s7); }
+.illu-masonry > .work-card { break-inside: avoid; width: 100%; margin: 0 0 var(--s6); display: block; }
+
+/* 插画：前 6 件固定编辑式编排（横幅 / 双联 / 横幅 / 双联），图片真实比例无空洞 */
+.illu-feat { display: flex; flex-direction: column; gap: var(--s5); }
+.illu-feat__cell { display: block; min-width: 0; }
+.illu-feat__cell .feat-img { width: 100%; height: auto; display: block; }
+.illu-feat__cell .work-card__cap { margin-top: var(--s3); }
+.illu-feat__pair { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s5); align-items: start; }
+/* 其余 12 件复用 .works-masonry（components.css）：桌面3列 / 平板2列 / 手机1列，自然比例无纵向空洞 */
+
+/* Works 页：作品标题字号提升，普通笔记本屏幕无需放大即可快速阅读（作用域限定本页，不影响首页冻结版式） */
+.works-page .work-card__title { font-size: 24px; }
+.works-page .work-card--feature-illu .work-card__title { font-size: 27px; }
+.works-page .oil-card__title { font-size: 26px; }
+
+/* 插画：Editorial Masonry（精选大图双联 + 常规瀑布流，每 8 件插入节奏分隔） */
+.illu-feature { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s5); margin-bottom: var(--s5); }
+.work-card--feature-illu .work-card__title { font-size: 22px; }
+.edi-divider { display: flex; align-items: center; gap: var(--s4); color: var(--ink-3); font-size: 12px; letter-spacing: .14em; text-transform: uppercase; margin: var(--s6) 0 var(--s5); }
+.edi-divider::before, .edi-divider::after { content: ""; height: 1px; background: var(--line); flex: 1; }
+
+/* 漫画：封面 + 代表内页 + 项目标题 + 页数 */
+.comic-list { border-top: 1px solid var(--line); }
+.comic-row { grid-template-columns: 170px 110px 1fr auto; gap: var(--s5); }
+.comic-row__page { width: 110px; max-width: 100%; overflow: hidden; background: var(--paper-2); }
+.comic-row__page img { width: 100%; height: auto; display: block; }
+.comic-row__body { min-width: 0; }
+
+/* 油画：独立大图画廊 */
+.oil-gallery { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s6); }
+.oil-card { display: block; }
+.oil-card__media { overflow: hidden; background: var(--paper-2); }
+.oil-card__media img { width: 100%; height: auto; display: block; transition: transform .7s cubic-bezier(.22,.61,.36,1); }
+.oil-card:hover .oil-card__media img { transform: scale(1.02); }
+.oil-card__cap { padding-top: var(--s3); display: flex; flex-direction: column; gap: 3px; }
+.oil-card__title { font-family: var(--font-display); font-size: 22px; font-weight: 500; }
+.oil-card__sub { font-size: 12px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); }
+
+/* 证书：1 张主证书（大）+ 3 张辅助证书（小），有明确主次，不散落于大空白 */
+.cv-cert-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--s6); max-width: 900px; }
+.cv-cert-layout { display: grid; grid-template-columns: 1.15fr 1fr; gap: var(--s6); align-items: start; max-width: 1040px; }
+.cv-cert-main { min-width: 0; }
+.cv-cert-aux { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--s4); align-items: start; }
+.cv-cert { text-align: left; background: transparent; border: 0; padding: 0; cursor: pointer; }
+.cv-cert__media { overflow: hidden; background: var(--paper-2); outline: 1px solid transparent; transition: outline-color .2s ease; }
+.cv-cert:hover .cv-cert__media { outline-color: var(--ink-2); }
+.cv-cert__media img, .cv-cert__media svg { width: 100%; height: auto; display: block; }
+.cv-cert__title { font-size: 12px; color: var(--ink-2); margin-top: 6px; line-height: 1.4; }
+.cv-cert-main .cv-cert__title { font-size: 13px; }
+.cv-cert-text__note { margin-top: var(--s4); line-height: 1.75; }
+.cv-cert-text__t { color: var(--ink); }
+
+/* —— 作品详情（完整展示原图，禁止裁切） —— */
+.detail { padding-block: var(--s6) var(--s8); }
+.detail__top { display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--s5); }
+.detail__cover { width: 100%; background: var(--paper-2); overflow: hidden; }
+.detail__cover img, .detail__cover svg { width: 100%; height: auto; display: block; }
+.detail__info { max-width: 760px; margin: var(--s7) auto var(--s8); display: flex; flex-direction: column; gap: var(--s4); }
+.detail__title { font-family: var(--font-display); font-size: clamp(36px, 5vw, 58px); font-weight: 500; line-height: 1.04; }
+.detail__meta { display: flex; flex-direction: column; gap: 0; padding: var(--s4) 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.detail__meta div { display: flex; justify-content: space-between; gap: var(--s4); font-size: 14px; padding: 7px 0; }
+.detail__meta span:first-child { color: var(--ink-3); letter-spacing: .04em; }
+.detail__intro { color: var(--ink-2); line-height: 1.85; font-size: 16px; }
+.detail__tags { display: flex; gap: 8px; flex-wrap: wrap; }
+.detail__series { display: flex; flex-direction: column; gap: var(--s7); }
+.detail__shot { background: var(--paper-2); overflow: hidden; }
+.detail__shot img, .detail__shot svg { width: 100%; height: auto; display: block; }
+.detail__shot:nth-child(even) { width: min(72%, 760px); margin-inline: auto; }
+
+/* 漫画封面 hero（标题 + 封面，暖白） */
+.comic-hero { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s8); align-items: center; padding-block: var(--s7); }
+.comic-hero__meta .eyebrow { margin-bottom: var(--s4); }
+.comic-hero__title { font-family: var(--font-display); font-size: clamp(40px, 5.5vw, 68px); font-weight: 500; margin-bottom: var(--s4); line-height: 1.02; }
+.comic-hero__intro { color: var(--ink-2); line-height: 1.8; max-width: 42ch; margin-bottom: var(--s5); font-size: 16px; }
+.comic-hero__media { width: 100%; max-width: 440px; overflow: hidden; background: var(--paper-2); justify-self: end; }
+.comic-hero__media img, .comic-hero__media svg { width: 100%; height: auto; display: block; }
+.comic-divider { display: flex; align-items: center; gap: var(--s4); color: var(--ink-3); font-size: 12px; letter-spacing: .1em; text-transform: uppercase; margin: var(--s5) 0; }
+.comic-divider::before, .comic-divider::after { content: ""; height: 1px; background: var(--line); flex: 1; }
+
+/* —— 个人介绍（编辑式履历：左 28% 章节索引 + 右 72% 内容；桌面两栏，手机单列） —— */
+.about { padding-block: var(--s6) var(--s7); }
+.about__head { max-width: 900px; margin-bottom: var(--gap-about); }
+.about__head .eyebrow { display: block; margin-bottom: var(--s4); }
+.about__name { font-family: var(--font-display); font-size: clamp(48px, 7vw, 96px); font-weight: 500; line-height: .98; }
+.about__role { font-size: 13px; letter-spacing: .22em; text-transform: uppercase; color: var(--ink-3); margin-top: var(--s4); }
+.about__lead { font-family: var(--font-sans); font-size: clamp(16px, 1.5vw, 19px); line-height: 1.75; color: var(--ink-2); margin-top: var(--s5); max-width: 52ch; }
+.about__stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--s5); margin: var(--s5) 0 var(--gap-about); padding: var(--s5) 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.about__stat-num { font-family: var(--font-display); font-size: clamp(40px, 5vw, 68px); font-weight: 500; line-height: 1; }
+.about__stat-label { font-size: 13px; color: var(--ink-3); margin-top: 8px; }
+
+.about-wrap { max-width: 1440px; }
+.about__body { display: grid; grid-template-columns: 19% 1fr; gap: var(--s6); align-items: start; }
+/* 正文阅读优先：整体字号再上调一级，减少极细极小带来的阅读负担 */
+.about__content { font-size: 18px; line-height: 1.9; }
+.about__content .secondary { font-size: 17px; line-height: 1.9; }
+.about__lead { font-size: clamp(19px, 1.8vw, 23px); line-height: 1.75; }
+.about__stat-label { font-size: 14px; }
+.cv-item__body h4 { font-size: 24px; }
+.cv-item__body p { font-size: 17px; line-height: 1.8; }
+.cv-honor__t { font-size: 18px; line-height: 1.65; }
+.cv-honor__yr { font-size: 14px; }
+.about__rail { position: sticky; top: calc(var(--nav-h) + var(--s5)); display: flex; flex-direction: column; gap: var(--s2); }
+.about__rail-link { display: flex; align-items: baseline; gap: var(--s3); width: 100%; text-align: left; background: transparent; border: 0; padding: var(--s3) 0; border-top: 1px solid var(--line); cursor: pointer; color: var(--ink-3); transition: color .15s ease; }
+.about__rail-num { font-family: var(--font-mono); font-size: clamp(28px, 3vw, 40px); font-weight: 500; line-height: 1; color: var(--ink); }
+.about__rail-title { font-size: 12px; letter-spacing: .14em; text-transform: uppercase; color: var(--ink-3); }
+.about__rail-link:hover { color: var(--ink); }
+.about__rail-link:hover .about__rail-title { color: var(--ink); }
+
+.about__content { display: flex; flex-direction: column; gap: var(--gap-about); min-width: 0; }
+.about__sec-head { display: flex; align-items: baseline; gap: var(--s3); margin-bottom: var(--s4); }
+.about__sec-num { font-family: var(--font-mono); font-size: 13px; color: var(--ink-3); }
+.about__sec-title { font-family: var(--font-display); font-size: clamp(24px, 2.6vw, 32px); font-weight: 500; }
+
+/* 时间线条目（大年份 + 标题 + 说明） */
+.cv-item { display: grid; grid-template-columns: 132px 1fr; gap: var(--s5); padding: var(--s4) 0; border-top: 1px solid var(--line); }
+.cv-item:first-child { border-top: 0; }
+.cv-item__yr { font-family: var(--font-display); font-size: clamp(22px, 2.4vw, 30px); font-weight: 500; line-height: 1.05; color: var(--ink); }
+
+.skill-list { display: flex; flex-wrap: wrap; gap: 10px; }
+.skill-list .tag { background: transparent; border: 1px solid var(--line-strong); color: var(--ink-2); }
+.direction-list { display: flex; flex-direction: column; gap: var(--s3); margin-top: var(--s4); }
+.direction-list li { list-style: none; padding-left: 18px; position: relative; color: var(--ink-2); }
+.direction-list li::before { content: ""; position: absolute; left: 0; top: 11px; width: 6px; height: 6px; background: var(--caramel); border-radius: 50%; }
+
+/* 荣誉：要点列表 + 证书窄幅胶片式横向排列 */
+.cv-honor { display: grid; grid-template-columns: 132px 1fr; gap: var(--s5); padding: var(--s3) 0; border-top: 1px solid var(--line); }
+.cv-honor:first-child { border-top: 0; }
+
+/* 旧 .cv-cert-strip 体系已废弃：证书统一使用 .cv-cert-layout / .cv-cert-main / .cv-cert-aux 一套规则（见上文） */
+
+/* 灯箱（点击证书放大） */
+.lightbox { position: relative; background: var(--paper); border: 1px solid var(--line); max-width: min(760px, 92vw); max-height: 88vh; overflow: auto; padding: var(--s2); }
+.lightbox img, .lightbox svg { width: 100%; height: auto; display: block; }
+.lightbox__close { position: absolute; top: 8px; right: 8px; width: 36px; height: 36px; border: 0; border-radius: 50%; background: rgba(33,27,20,.7); color: #fff; font-size: 18px; line-height: 1; }
+
+/* —— 后台登录 —— */
+.login-wrap { min-height: calc(100vh - var(--nav-h)); display: flex; align-items: center; justify-content: center; padding: var(--s6); }
+.login-card { width: min(400px, 100%); background: var(--paper); border: 1px solid var(--line); border-radius: var(--r-lg); padding: var(--s7); box-shadow: var(--shadow-md); }
+.login-card h1 { font-family: var(--font-display); font-size: 30px; text-align: center; margin-bottom: var(--s2); }
+.login-card .sub { text-align: center; color: var(--ink-3); font-size: 14px; margin-bottom: var(--s6); }
+.login-card .form { gap: var(--s4); }
+
+/* —— 通用页眉小工具 —— */
+.toolbar { display: flex; align-items: center; gap: var(--s3); flex-wrap: wrap; margin-bottom: var(--s5); }
+.spacer { flex: 1; }
+
+/* —— 交付修复：Works / About 图片与容器默认完全可见（无 reveal 隐藏 / 淡入动画） —— */

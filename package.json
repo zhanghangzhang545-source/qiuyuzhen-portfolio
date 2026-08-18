@@ -1,0 +1,12 @@
+{
+  "name": "art-portfolio-qiu-yuzhen",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "邱钰真 QIU YUZHEN 个人艺术作品集（插画 / 漫画 / 油画）。零依赖纯前端 SPA，数据/存储走统一接口（当前为 Mock 实现），便于后续接入正式数据库与对象存储。",
+  "scripts": {
+    "start": "node serve.mjs",
+    "start:py": "python -m http.server 8080",
+    "serve": "npx --yes serve -l 5173 ."
+  }
+}

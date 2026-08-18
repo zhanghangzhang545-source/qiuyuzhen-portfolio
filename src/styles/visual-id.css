@@ -1,0 +1,330 @@
+/* ============================================================
+   visual-id.css — 第二阶段：Editorial Visual Identity（编辑式视觉识别系统）
+   设计原则：
+     · 作品占 80%，视觉识别占 20%；网站托住作品，不压过作品。
+     · 不新增主色；仅靠字体 / 比例 / 线条 / 编号 / 展签 / 排版建立识别度。
+     · 桌面优先；装饰性细节在窄屏隐藏，不破坏已冻结的手机版式。
+   ============================================================ */
+
+/* —— 极轻纸张质感（仅暖白区域可见；深咖区块有自身底色会自然遮住） —— */
+body::before {
+  content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 200px 200px;
+  opacity: 0.018;            /* ≈1.8%，第一眼几乎无感，放大才略有纸感 */
+  mix-blend-mode: multiply;
+}
+
+/* ============================================================
+   01｜QIU YUZHEN 文字字标系统（纯排版，无图形 Logo）
+   ============================================================ */
+.brand { gap: 12px; align-items: center; }
+.brand__mark {
+  font-family: var(--font-display);
+  font-size: 21px; font-weight: 600;
+  letter-spacing: 0.22em;           /* 英文字距：克制、出版物感 */
+  color: var(--espresso);           /* 提高一级对比：深咖啡黑，在暖米底上更清晰（手机黑作参考，桌面可稍弱于此） */
+  white-space: nowrap;
+}
+/* Q / Y 关系：用极细分隔点轻点出两个词段，不作任何图形 */
+.brand__sub {
+  font-family: var(--font-mono);
+  font-size: 10px; letter-spacing: 0.22em; text-transform: uppercase;
+  color: var(--ink-3);
+}
+.site-nav--hero .brand__mark { color: var(--paper); }   /* 暗场：暖白，比原浅米更清晰一级；仍轻于手机黑参考 */
+.site-nav--hero .brand__sub { color: var(--ink-on-dark-2); }
+
+/* 页脚小尺寸版字标 */
+.site-footer__brand {
+  font-family: var(--font-display);
+  font-size: 20px; font-weight: 600; letter-spacing: 0.2em;
+  color: var(--ink-on-dark);
+}
+.site-footer__brand .qy-colophon {
+  display: block; margin-top: 10px;
+  font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.18em;
+  text-transform: uppercase; color: var(--ink-on-dark-2); line-height: 1.7;
+}
+/* 章节中的缩略版字标（QY 字母组合） —— 本轮按要求移除所有裸 QY 占位，留空待后续人工确认 monogram */
+
+/* ============================================================
+   02｜全站统一章节系统
+   数字 / 英文大写字距 / 中文标题层级 / 长细线 / 左右关系 / 上下间距
+   ============================================================ */
+.works-chapter {
+  position: relative;
+  border-top: 1px solid var(--ink);     /* 长细线：1px，不再用 2px 重线 */
+  padding-top: var(--s5);
+}
+.works-chapter__num {
+  font-family: var(--font-mono);
+  font-size: 13px; letter-spacing: 0.16em; line-height: 1;
+  color: var(--caramel); font-weight: 600;
+}
+.works-chapter__head {
+  display: flex; align-items: flex-end; justify-content: space-between;
+  gap: var(--s5); margin-top: 14px; margin-bottom: var(--s5);
+}
+.works-chapter__en {
+  display: block; font-size: 11px; letter-spacing: 0.3em; text-transform: uppercase;
+  color: var(--ink-3); font-weight: 600; margin-bottom: 12px;
+}
+.works-chapter__title {
+  font-family: var(--font-display);
+  font-size: clamp(28px, 3.4vw, 46px); font-weight: 500; line-height: 1;
+  color: var(--ink);
+}
+.works-chapter__meta { gap: var(--s5); }
+.works-chapter__count { color: var(--ink-3); font-size: 13px; letter-spacing: 0.06em; }
+.works-chapter__mono { margin-left: var(--s4); }
+
+/* 章节内：极小栏目编号（P.01 式编辑页码） */
+.works-chapter__pageno {
+  font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.14em;
+  color: var(--ink-3);
+}
+
+/* 深咖背景版本（首页核心漫画专题 / 漫画页） */
+.section--dark .works-chapter { border-top-color: var(--line-dark); }
+.section--dark .works-chapter__num { color: var(--caramel); }
+.section--dark .works-chapter__en { color: var(--ink-on-dark-2); }
+.section--dark .works-chapter__title { color: var(--ink-on-dark); }
+.section--dark .works-chapter__count,
+.section--dark .works-chapter__pageno { color: var(--ink-on-dark-2); }
+
+/* ---- 首页专题标题（topicHead 复用 .works-chapter）已在上方统一定义 ---- */
+
+/* ============================================================
+   03｜作品展签系统 Work Label（美术馆展签 / 编辑杂志 Caption）
+   细线 + 编号 + 大标题 + 极小辅助文字；不使用卡片背景。
+   ============================================================ */
+.work-label { position: relative; margin-top: var(--s3); }
+.work-label__rule {
+  display: block; width: 38px; height: 1px; background: var(--ink);
+  margin-bottom: 11px;
+  transition: width .26s ease, background .26s ease;
+}
+.work-label__top { display: flex; align-items: baseline; gap: 10px; }
+.work-label__idx {
+  font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.1em;
+  color: var(--caramel); font-weight: 600;
+}
+.work-label__cat {
+  font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.2em;
+  text-transform: uppercase; color: var(--ink-3);
+}
+.work-label__title {
+  font-family: var(--font-display); font-size: clamp(18px, 1.7vw, 22px);
+  font-weight: 500; line-height: 1.22; color: var(--ink); margin-top: 6px;
+  transition: color .2s ease;
+}
+.work-label__sub {
+  display: block; margin-top: 5px;
+  font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase;
+  color: var(--ink-3);
+}
+.work-label__view {
+  display: inline-flex; align-items: center; gap: 6px; margin-top: 9px;
+  font-size: 10.5px; letter-spacing: 0.2em; text-transform: uppercase;
+  color: var(--caramel);
+  opacity: 0; transform: translateY(4px);
+  transition: opacity .26s ease, transform .26s ease;
+}
+.work-label__view .arrow { transition: transform .26s ease; }
+
+/* 深咖背景下展签（漫画专题） */
+.section--dark .work-label__rule { background: var(--ink-on-dark-2); }
+.section--dark .work-label__cat { color: var(--ink-on-dark-2); }
+.section--dark .work-label__title { color: var(--ink-on-dark); }
+.section--dark .work-label__sub { color: var(--ink-on-dark-2); }
+
+/* —— 两级系统 B 级：Compact Label（普通 Archive 作品） ——
+   仅 标题 + 类目；无编号 / 长细线 / ORIGINAL WORK / VIEW PROJECT。
+   与 A 级 Full Label 形成明确视觉层级。 */
+.work-label--compact { margin-top: var(--s2); }
+.work-label--compact .work-label__title { font-size: clamp(16px, 1.4vw, 19px); margin-top: 0; }
+.work-label--compact .work-label__cat { display: block; margin-top: 5px; }
+
+/* 悬停：细线轻微位移 + VIEW PROJECT 轻淡入 + 标题转为焦糖 */
+.feat-link:hover .work-label__view,
+.work-card:hover .work-label__view,
+.oil-card:hover .work-label__view,
+.comic-row:hover .work-label__view,
+.illu-feat__cell:hover .work-label__view,
+.composite__oil:hover .work-label__view { opacity: 1; transform: none; }
+.feat-link:hover .work-label__view .arrow { transform: translateX(3px); }
+.feat-link:hover .work-label__rule,
+.work-card:hover .work-label__rule,
+.oil-card:hover .work-label__rule,
+.comic-row:hover .work-label__rule,
+.illu-feat__cell:hover .work-label__rule,
+.composite__oil:hover .work-label__rule { width: 60px; background: var(--caramel); }
+.feat-link:hover .work-label__title,
+.work-card:hover .work-label__title,
+.oil-card:hover .work-label__title,
+.comic-row:hover .work-label__title,
+.illu-feat__cell:hover .work-label__title,
+.composite__oil:hover .work-label__title { color: var(--caramel); }
+
+/* ============================================================
+   04｜出版物细节（每页最多 1–2 种；不堆砌）
+   页脚版本式信息 + 印刷定位十字（colophon）
+   ============================================================ */
+.site-footer__note {
+  display: flex; align-items: center; gap: 12px;
+  font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.edi-reg {
+  display: inline-block; width: 11px; height: 11px; position: relative;
+  opacity: .7;
+}
+.edi-reg::before, .edi-reg::after {
+  content: ""; position: absolute; background: var(--ink-on-dark-2);
+}
+.edi-reg::before { left: 50%; top: 0; width: 1px; height: 100%; transform: translateX(-50%); }
+.edi-reg::after { top: 50%; left: 0; height: 1px; width: 100%; transform: translateY(-50%); }
+
+/* ============================================================
+   05｜漫画专区专属视觉（保留深咖 + 连续阅读；仅在项目介绍区强化）
+   ============================================================ */
+.comics__feature-title { letter-spacing: 0.01em; }
+.comics__feature-proj--en { letter-spacing: 0.08em; }
+/* 漫画行：展签式细线已在 .work-label 内；强化编号与标签关系 */
+.comic-row__pages {
+  font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.06em;
+  color: var(--ink-3); white-space: nowrap;
+}
+.comic-row__pages .tag--cat { font-size: 11px; }
+
+/* 漫画项目说明中的 ORIGINAL COMIC 标签 */
+.comic-tag {
+  display: inline-block; font-family: var(--font-mono); font-size: 10.5px;
+  letter-spacing: 0.2em; text-transform: uppercase; color: var(--ink-on-dark-2);
+  border: 1px solid var(--line-dark); padding: 5px 10px; margin-top: 4px;
+}
+.comic-hero__meta .comic-tag {
+  color: var(--ink-3); border-color: var(--line-strong);
+}
+
+/* ============================================================
+   细节页 / 漫画阅读页 视觉识别扩展（复用同一套语言，不新增元素；不覆盖作品）
+   ============================================================ */
+
+/* —— 作品详情：标题区出版物 kicker（类目 + 发丝线 + ORIGINAL 标记） —— */
+.detail__kicker { display: flex; align-items: center; gap: 12px; margin-bottom: var(--s4); }
+.detail__kicker-cat {
+  font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.2em;
+  text-transform: uppercase; color: var(--caramel); font-weight: 600;
+}
+.detail__kicker-rule { width: 34px; height: 1px; background: var(--ink); }
+.detail__kicker-sub {
+  font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.16em;
+  text-transform: uppercase; color: var(--ink-3);
+}
+
+/* 多图：出版物式 FIG 图注（真实顺序，不虚构） */
+.detail__shot { position: relative; }
+.detail__shot-cap {
+  display: block; margin-top: 8px;
+  font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.16em;
+  text-transform: uppercase; color: var(--ink-3);
+}
+
+/* —— 漫画阅读页：连续向下，仅加极简页码（出版物分页语言） —— */
+.reader__page { position: relative; }
+.reader__pageno {
+  display: block; margin-top: 8px; text-align: center;
+  font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.18em;
+  color: var(--ink-3);
+}
+
+/* 漫画详情 hero eyebrow 与全站焦糖语言对齐 */
+.comic-hero__meta .eyebrow { color: var(--caramel); }
+
+/* ============================================================
+   06｜About 视觉身份：章节与首页 / Works 同一套系统
+   ============================================================ */
+.about__sec { border-top: 1px solid var(--line); padding-top: var(--s5); margin-top: var(--gap-about); }
+.about__sec:first-child { border-top: 0; padding-top: 0; margin-top: 0; }
+.about__sec-head { margin-bottom: var(--s5); align-items: baseline; }
+.about__sec-num {
+  font-family: var(--font-mono); font-size: 13px; letter-spacing: 0.16em;
+  color: var(--caramel); font-weight: 600;
+}
+.about__sec-title {
+  font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.3em;
+  text-transform: uppercase; color: var(--ink-3); font-weight: 600;
+}
+/* About 头部姓名与首页/作品同调（字标语言一致） */
+.about__name { letter-spacing: 0.04em; }
+
+/* ============================================================
+   08｜微交互（桌面重点作品；~260ms；无 3D / 粒子 / 视差 / 弹跳 / 旋转）
+   ============================================================ */
+.work-card__media img, .work-card__media svg,
+.oil-card__media img, .comic-row__cover img, .comic-row__page img,
+.feat-img, .comics__cover img, .comics__cat-cover img {
+  transition: transform .26s cubic-bezier(.22,.61,.36,1);
+}
+.work-card:hover .work-card__media img, .work-card:hover .work-card__media svg { transform: scale(1.012); }
+.oil-card:hover .oil-card__media img { transform: scale(1.012); }
+.comic-row:hover .comic-row__cover img { transform: scale(1.015); }
+
+/* 键盘可访问性：:focus-visible 复用 hover 的轻反馈（细线位移 / VIEW PROJECT 淡入 / 标题转焦糖 / 图片微缩放） */
+a.work-card:focus-visible, a.oil-card:focus-visible, a.comic-row:focus-visible,
+a.illu-feat__cell:focus-visible, a.composite__oil:focus-visible, a.feat-link:focus-visible {
+  outline: 1px solid var(--caramel); outline-offset: 3px;
+}
+a.work-card:focus-visible .work-card__media img, a.work-card:focus-visible .work-card__media svg { transform: scale(1.012); }
+a.oil-card:focus-visible .oil-card__media img { transform: scale(1.012); }
+a.comic-row:focus-visible .comic-row__cover img { transform: scale(1.015); }
+a.feat-link:focus-visible .work-label__view,
+a.work-card:focus-visible .work-label__view,
+a.oil-card:focus-visible .work-label__view,
+a.comic-row:focus-visible .work-label__view,
+a.illu-feat__cell:focus-visible .work-label__view,
+a.composite__oil:focus-visible .work-label__view { opacity: 1; transform: none; }
+a.feat-link:focus-visible .work-label__view .arrow { transform: translateX(3px); }
+a.feat-link:focus-visible .work-label__rule,
+a.work-card:focus-visible .work-label__rule,
+a.oil-card:focus-visible .work-label__rule,
+a.comic-row:focus-visible .work-label__rule,
+a.illu-feat__cell:focus-visible .work-label__rule,
+a.composite__oil:focus-visible .work-label__rule { width: 60px; background: var(--caramel); }
+a.feat-link:focus-visible .work-label__title,
+a.work-card:focus-visible .work-label__title,
+a.oil-card:focus-visible .work-label__title,
+a.comic-row:focus-visible .work-label__title,
+a.illu-feat__cell:focus-visible .work-label__title,
+a.composite__oil:focus-visible .work-label__title { color: var(--caramel); }
+
+/* 导航下划线（已有，统一为焦糖细线位移） */
+.nav-links a::after { transition: transform .22s ease; }
+.link, .link--light, .home-head a, .catindex__item, .comic-cat, .intro-teaser a {
+  transition: color .2s ease, border-color .2s ease;
+}
+
+/* —— 手机端「筛选 / FILTER」折叠按钮（桌面隐藏；高级筛选默认收起，点击展开） —— */
+.filter-toggle {
+  display: none;                     /* 桌面默认不显示，结构不变 */
+  font-family: var(--font-mono); font-size: 11px; letter-spacing: .16em; text-transform: uppercase;
+  color: var(--ink); background: transparent; border: 1px solid var(--line-strong);
+  padding: 10px 14px; cursor: pointer; align-items: center; gap: 8px;
+}
+.filter-toggle__chev { transition: transform .2s ease; }
+.filter-bar.is-open .filter-toggle__chev { transform: rotate(180deg); }
+
+/* ---- 窄屏：隐藏纯装饰细节，保持冻结版式不变 ---- */
+@media (max-width: 720px) {
+  .works-chapter__pageno, .edi-reg, .reader__pageno { display: none !important; }
+  /* 手机优先：图片 > 标题 > 必要类型信息；卡片可点击，不重复显示 VIEW PROJECT；
+     漫画连续阅读页码隐藏，避免 42 页阅读过程中的视觉噪音 */
+
+  /* 手机 Works：高级筛选默认收起，仅保留 全部 / 插画 / 漫画 / 油画 + 筛选按钮，
+     招聘方首屏即可见第一件作品，而非一整屏表单。 */
+  .filter-toggle { display: inline-flex; }
+  .filter-adv { display: none !important; }
+  .filter-bar.is-open .filter-adv { display: flex !important; flex-direction: column; gap: 12px; }
+}

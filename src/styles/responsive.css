@@ -1,0 +1,194 @@
+/* ============================================================
+   Responsive — 桌面 / 平板 / 手机 分别认真设计，非等比缩放  (V3)
+   手机端硬性要求：安全边距 ≥20px、文字不贴边不截断、首屏以真实作品为主、
+   不出现整屏空白、作品按真实比例全宽呈现。
+   ============================================================ */
+
+/* —— 平板：<=1024px —— */
+@media (max-width: 1024px) {
+  /* 作品库 masonry 由 components.css 统一处理（桌面3列 / 平板2列 / 手机1列） */
+
+  .cert-grid { grid-template-columns: repeat(3, 1fr); }
+  .catindex { grid-template-columns: repeat(2, 1fr); }
+  .catindex__item:nth-child(2) { border-right: 0; }
+  .catindex__item { border-bottom: 1px solid var(--line); }
+  .site-footer__inner { grid-template-columns: 1fr 1fr; }
+
+  .comics__feature { grid-template-columns: 300px 1fr; gap: var(--s6); }
+  .illu-archive { column-count: 2; }
+  .about__body { grid-template-columns: 20% 1fr; gap: var(--s6); }
+  .about__stats { grid-template-columns: repeat(4, 1fr); }
+  .comic-hero { gap: var(--s6); }
+  .comic-row { grid-template-columns: 140px 90px 1fr auto; gap: var(--s4); }
+  .admin { grid-template-columns: 210px 1fr; }
+  .stat-row { grid-template-columns: repeat(2, 1fr); }
+}
+
+/* —— 手机：<=720px —— */
+@media (max-width: 720px) {
+  :root { --nav-h: 60px; --pad-x: clamp(20px, 6vw, 36px); }
+  body { font-size: 17px; line-height: 1.8; }
+  .section { padding-block: 44px; }
+
+  /* 导航折叠为顶部条 + 抽屉（保持安全边距） */
+  .nav-toggle { display: inline-flex; align-items: center; justify-content: center; font-size: 20px; }
+  .brand__sub { display: none; }
+  .nav-links {
+    position: fixed; inset: var(--nav-h) 0 auto 0;
+    flex-direction: column; align-items: stretch; gap: 0;
+    background: var(--paper); border-bottom: 1px solid var(--line);
+    padding: var(--s2) var(--pad-x) var(--s4); margin: 0;
+    transform: translateY(-130%); transition: transform .25s ease; box-shadow: var(--shadow-md);
+  }
+  .nav-links.is-open { transform: none; }
+  .nav-links a { padding: 15px 0; border-bottom: 1px solid var(--line); font-size: 16px; color: var(--ink); }
+  .nav-links a::after { display: none; }
+  .site-nav--hero .nav-links { background: var(--espresso); border-bottom-color: var(--line-dark); }
+  .site-nav--hero .nav-links a { color: var(--ink-on-dark); border-bottom-color: var(--line-dark); }
+
+  /* 首页 Hero（手机）：取消 100svh + object-fit:cover；完整横图在上，文字在下，高度自然产生 */
+  .hero { display: block; min-height: 0; background: var(--paper); color: var(--ink); }
+  .hero__media { position: static; height: auto; }
+  .hero__img { width: 100%; height: auto; object-fit: initial; object-position: initial; }
+  .hero__scrim { display: none; }
+  .hero__inner { position: static; padding: var(--s3) var(--pad-x) var(--s5); color: var(--ink); }
+  .hero__copy { max-width: none; width: 100%; }
+  .hero__kicker { display: none; }
+  .hero__name { font-size: clamp(44px, 14vw, 84px); color: var(--ink); }
+  .hero__cn { font-size: 24px; margin-top: var(--s2); color: var(--ink); }
+  .hero__lead { font-size: 15px; margin-top: var(--s2); color: var(--ink-2); }
+  .hero__scroll { display: none; }
+  /* 手机端首页导航也用纸色实底，避免浅色字压在亮图上 */
+  .site-nav--hero { background: color-mix(in srgb, var(--paper) 94%, transparent); backdrop-filter: saturate(120%) blur(6px); border-bottom-color: var(--line); color: var(--ink); }
+  .site-nav--hero .brand__mark, .site-nav--hero .brand__sub { color: var(--ink); }
+  .site-nav--hero .nav-links a { color: var(--ink-2); }
+  .site-nav--hero .nav-links a.is-active { color: var(--ink); }
+  .site-nav--hero .nav-toggle { border-color: var(--line-strong); color: var(--ink); }
+
+  /* 手机端：删除不必要的小编号 / 小英文标签，保证正文可读与点击区域足够大 */
+  .idx, .eyebrow, .works-chapter__en { display: none; }
+  /* 保留章节编号（01/02/03）作为索引，但去掉无意义的英文副标，标题即中文名 */
+  .works-chapter__head { margin-bottom: var(--s5); }
+  .works-chapter__title { font-size: 28px; }
+  .work-card__title { font-size: 22px; }
+  .work-card__sub { font-size: 13px; color: var(--ink-3); }
+  .comic-row__intro { display: none; } /* 手机优先：图 > 名 > 年份/页数；长说明折叠 */
+  .filter-tabs button { padding: 12px 0; min-height: 44px; display: inline-flex; align-items: center; }
+  .nav-links a { padding: 16px 0; }
+
+  /* 区段标题纵向排列 */
+  .home-head { flex-direction: column; align-items: flex-start; gap: var(--s2); }
+
+  /* 精选段落 → 手机单列全宽（每段自然高度，不互相牵制） */
+  .feat-portrait__pair { grid-template-columns: 1fr; gap: var(--s4); }
+  .feat-portrait__text { padding-top: 0; }
+  .feat-pair__small { margin-top: var(--s5); }
+  .feat-comicprev { grid-template-columns: 80px 1fr; gap: var(--s4); }
+  .feat-comicprev__cover { width: 80px; }
+  .feat-comicprev__pages { display: none; }
+  .feat-comic__pages { grid-template-columns: repeat(3, 1fr); gap: var(--s2); }
+
+  /* 漫画专区 → 单列：2026 大封面 + 内页 3 列；其余为纵向目录行 */
+  .comics__feature { grid-template-columns: 1fr; gap: var(--s5); }
+  .comics__cover { max-width: 260px; }
+  .comics__pages { grid-template-columns: repeat(3, 1fr); }
+  .comic-cat { grid-template-columns: 32px 56px 1fr; gap: var(--s3); }
+  .comic-cat__cover { width: 56px; }
+  .comic-cat__meta { grid-column: 2 / -1; white-space: normal; }
+
+  /* 关于预告：单列，数据横向 */
+  .intro-teaser { grid-template-columns: 1fr; gap: var(--s5); }
+  .intro-teaser__stats { grid-template-columns: repeat(3, 1fr); border-left: 0; padding-left: 0; border-top: 1px solid var(--line); padding-top: var(--s5); }
+  .intro-teaser__num { font-size: 34px; }
+
+  /* 作品分类索引：单列 */
+  .catindex { grid-template-columns: 1fr; }
+  .catindex__item { border-right: 0; border-bottom: 1px solid var(--line); padding: var(--s5) 0; }
+  .catindex__item:last-child { border-bottom: 0; }
+
+  /* 作品库：单列全宽大图（每张真实比例，masonry 列数由 components.css 控制） */
+  .works-masonry { column-count: 1; column-gap: 0; }
+  .work-card__title { font-size: 20px; }
+
+  .cert-grid { grid-template-columns: 1fr 1fr; gap: var(--s4); }
+
+  /* 筛选栏：类型横向滚动，其余纵向 */
+  .filter-bar { flex-direction: column; align-items: stretch; gap: var(--s3); padding: var(--s4) 0; }
+  .filter-tabs { overflow-x: auto; flex-wrap: nowrap; gap: var(--s5); padding-bottom: 6px; }
+  .filter-tabs button { white-space: nowrap; }
+  .filter-field { min-width: 0; }
+  .filter-bar__actions { margin-left: 0; }
+  .filter-search { min-width: 0; }
+
+  /* 作品库：手机单列；统一章节标题纵向堆叠 */
+  .works-groups { gap: var(--s6); }
+  .works-chapter__head { flex-direction: column; align-items: flex-start; gap: var(--s3); }
+  .works-chapter__meta { flex-direction: column; align-items: flex-start; gap: var(--s2); }
+  .works-chapter__title { font-size: 30px; }
+  .illu-feat { gap: var(--s5); }
+  .illu-feat__pair { grid-template-columns: 1fr; gap: var(--s5); }
+  .cv-cert-layout { grid-template-columns: 1fr; gap: var(--s5); }
+  .cv-cert-aux { grid-template-columns: repeat(3, 1fr); }
+  .oil-gallery { grid-template-columns: 1fr; gap: var(--s5); }
+  .comic-row { grid-template-columns: 104px 1fr; gap: var(--s4); padding: var(--s5) 0; }
+  .comic-row__page { display: none; }
+  .comic-row__pages { grid-column: 1 / -1; }
+  .comic-row__title { font-size: 21px; }
+  .cv-cert-grid { grid-template-columns: 1fr; max-width: none; }
+
+  /* 详情：单列，原图全宽 */
+  .detail { padding-block: var(--s5) var(--s7); }
+  .detail__info { margin: var(--s5) auto var(--s6); }
+  .detail__title { font-size: 30px; }
+  .detail__shot:nth-child(even) { width: 100%; margin-inline: 0; }
+
+  /* 漫画详情：封面在上，文字下 */
+  .comic-hero { grid-template-columns: 1fr; gap: var(--s5); padding-block: var(--s5); }
+  .comic-hero__media { order: -1; max-width: 100%; justify-self: stretch; }
+  .comic-hero__title { font-size: clamp(30px, 9vw, 46px); }
+  .comic-divider { margin: var(--s5) 0; }
+
+  /* 综合创作：手机单列（献上战舞全宽，两幅油画下方堆叠，不再挤压成双列） */
+  .composite { grid-template-columns: 1fr; gap: var(--s5); }
+  .composite__oils { gap: var(--s5); }
+
+  /* 漫画阅读：纵向连续翻页，接近全宽，页间距统一；无分页导航/进度，不覆盖原作 */
+  .reader { max-width: 100%; }
+  .reader__page { margin-bottom: var(--s4); }
+
+  /* 个人介绍：单列，左编号栏隐藏（编号并入各段标题） */
+  .about__body { grid-template-columns: 1fr; gap: var(--s5); }
+  .about__rail { display: none; }
+  .about__content { gap: var(--s6); }
+  .about__stats { grid-template-columns: repeat(2, 1fr); gap: var(--s4); }
+  .about__stat-num { font-size: 36px; }
+  .cv-item, .cv-honor { grid-template-columns: 1fr; gap: var(--s2); }
+  .cv-item__yr { font-size: 16px; }
+  .cv-honor__yr { padding-top: 0; }
+  .cv-cert { width: 100%; min-width: 0; }
+
+  /* 后台：侧栏变顶部 */
+  .admin { grid-template-columns: 1fr; }
+  .admin__side { border-right: 0; border-bottom: 1px solid var(--line); display: flex; gap: var(--s2); overflow-x: auto; padding: var(--s4); }
+  .admin__brand { display: none; }
+  .admin__nav { display: flex; gap: var(--s2); }
+  .admin__nav a { white-space: nowrap; }
+  .admin__main { padding: var(--s5) var(--s4) var(--s8); }
+  .stat-row { grid-template-columns: 1fr 1fr; }
+  .form-grid { grid-template-columns: 1fr; }
+  .table-scroll { overflow-x: auto; }
+  .table { min-width: 640px; }
+
+  .login-card { padding: var(--s6) var(--s5); }
+}
+
+/* —— 超小屏：<=420px —— */
+@media (max-width: 420px) {
+  .cert-grid { grid-template-columns: 1fr; }
+  .catindex { grid-template-columns: 1fr; }
+  .catindex__item { border-right: 0; }
+  .stat-row { grid-template-columns: 1fr; }
+  .site-footer__inner { grid-template-columns: 1fr; gap: var(--s5); }
+  .comic-row { grid-template-columns: 84px 1fr; }
+  .about__stats { grid-template-columns: 1fr; }
+}
