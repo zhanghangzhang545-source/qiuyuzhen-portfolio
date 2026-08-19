@@ -9,6 +9,9 @@ import { imgEl } from '../components/media.js';
 import { emptyState, catTag } from '../components/primitives.js';
 import { natureSub } from '../components/label.js';
 
+// 漫画详情封面：展示宽 ≤440px；P0 性能专项加入 sizes，视觉不变
+const SZ_COVER = '(max-width: 600px) 92vw, 440px';
+
 export async function comicReaderView(params, query) {
   const work = await repo.getById(params.id);
   if (!work || work.type !== 'comic') {
@@ -31,7 +34,7 @@ export async function comicReaderView(params, query) {
         h('span', { class: 'tag tag--accent' }, `共 ${work.pages.length} 页`),
       ]),
     ]),
-    h('div', { class: 'comic-hero__media' }, imgEl(work.cover, null, work.title, { eager: true, w: work.coverW, h: work.coverH })),
+    h('div', { class: 'comic-hero__media' }, imgEl(work.cover, null, work.title, { eager: true, w: work.coverW, h: work.coverH, sizes: SZ_COVER })),
   ]);
 
   return h('div', { class: 'container section' }, [
