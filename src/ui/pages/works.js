@@ -26,6 +26,16 @@ const CHAPTER_META = {
 // 插画前 6 件固定编辑式编排（横幅 / 双联 / 横幅 / 双联），其余 12 件 CSS 多列自然流
 const FEATURE_ILLU = ['i01', 'i12', 'i13', 'i14', 'i10', 'i17'];
 
+// 响应式 sizes（按真实展示宽度；P0 性能专项加入，视觉/版式不变）
+const SZ = {
+  comicCover: '(max-width: 480px) 84px, (max-width: 1024px) 140px, 180px',
+  comicPage: '(max-width: 480px) 70px, (max-width: 1024px) 90px, 110px',
+  oil: '(max-width: 600px) 92vw, (max-width: 1024px) 46vw, 560px',
+  full: '(max-width: 600px) 92vw, (max-width: 1024px) 62vw, 1180px',
+  half: '(max-width: 600px) 46vw, (max-width: 1024px) 46vw, 560px',
+  masonry: '(max-width: 600px) 92vw, (max-width: 1024px) 31vw, 370px',
+};
+
 /** 统一的章节标题（三种媒介共用，确保层级 / 编号 / 字号 / 边距 / 分割一致） */
 function chapterHeader(key, count) {
   const m = CHAPTER_META[key];
@@ -51,8 +61,8 @@ function comicRow(work, i = 0, eager = false) {
   // 左侧辅助文字：年份 · 真实作品性质（来自 workNature，不硬编码）；页数移到右侧单独列
   const sub = [work.year ? String(work.year) : null, natureSub(work)].filter(Boolean).join(' · ');
   return h('a', { class: 'comic-row', href: `#/comic/${work.id}` }, [
-    h('div', { class: 'comic-row__cover' }, imgEl(work.cover, null, work.title, opt(work.coverW, work.coverH))),
-    rep ? h('div', { class: 'comic-row__page' }, imgEl(rep.image, null, `${work.title} 内页`, opt(rep.w, rep.h))) : null,
+    h('div', { class: 'comic-row__cover' }, imgEl(work.cover, null, work.title, { ...opt(work.coverW, work.coverH), sizes: SZ.comicCover })),
+    rep ? h('div', { class: 'comic-row__page' }, imgEl(rep.image, null, `${work.title} 内页`, { ...opt(rep.w, rep.h), sizes: SZ.comicPage })) : null,
     h('div', { class: 'comic-row__body' }, [
       workLabel({ num, en: 'COMIC', title: work.title, sub }),
       work.intro ? h('p', { class: 'comic-row__intro' }, work.intro) : null,
@@ -64,7 +74,7 @@ function comicRow(work, i = 0, eager = false) {
 function oilItem(work, i = 0, eager = false) {
   const num = String(i + 1).padStart(2, '0');
   return h('a', { class: 'oil-card', href: `#/work/${work.id}` }, [
-    h('div', { class: 'oil-card__media' }, imgEl(work.cover, null, work.title, { w: work.coverW, h: work.coverH, ...(eager ? { eager: true } : {}) })),
+    h('div', { class: 'oil-card__media' }, imgEl(work.cover, null, work.title, { w: work.coverW, h: work.coverH, sizes: SZ.oil, ...(eager ? { eager: true } : {}) })),
     workLabel({ num, en: 'OIL PAINTING', title: work.title, sub: 'ORIGINAL WORK' }),
   ]);
 }
@@ -73,10 +83,10 @@ function oilItem(work, i = 0, eager = false) {
    前 6 件固定编辑式编排：横幅(i01) / 双联(i12+i13) / 横幅(i14) / 双联(i10+i17)，
    均按真实比例呈现，无空洞、无 Grid 行孔。
    其余 12 件进入 CSS 多列自然流（桌面 3 / 平板 2 / 手机 1），稳定不参差。 —— */
-function illuCard(work, num = '', eager = false) {
+function illuCard(work, num = '', eager = false, sizes = SZ.full) {
   if (!work) return null;
   return h('a', { class: 'illu-feat__cell feat-link', href: `#/work/${work.id}` }, [
-    imgEl(work.cover, 'feat-img', work.title, { w: work.coverW, h: work.coverH, ...(eager ? { eager: true } : {}) }),
+    imgEl(work.cover, 'feat-img', work.title, { w: work.coverW, h: work.coverH, sizes, ...(eager ? { eager: true } : {}) }),
     workLabel({ num, en: 'ILLUSTRATION', title: work.title, sub: 'ORIGINAL WORK' }),
   ]);
 }
@@ -92,14 +102,14 @@ function illustrationGrid(list, eagerFirst = false) {
   const banner2 = feat('i14');
   const pair2 = [feat('i10'), feat('i17')].filter(Boolean);
 
-  if (banner1) wrap.appendChild(illuCard(banner1, '01', eagerFirst));
-  if (pair1.length) wrap.appendChild(h('div', { class: 'illu-feat__pair' }, pair1.map((w, i) => illuCard(w, String(i + 2).padStart(2, '0')))));
-  if (banner2) wrap.appendChild(illuCard(banner2, '04'));
-  if (pair2.length) wrap.appendChild(h('div', { class: 'illu-feat__pair' }, pair2.map((w, i) => illuCard(w, String(i + 5).padStart(2, '0')))));
+  if (banner1) wrap.appendChild(illuCard(banner1, '01', eagerFirst, SZ.full));
+  if (pair1.length) wrap.appendChild(h('div', { class: 'illu-feat__pair' }, pair1.map((w, i) => illuCard(w, String(i + 2).padStart(2, '0'), false, SZ.half))));
+  if (banner2) wrap.appendChild(illuCard(banner2, '04', false, SZ.full));
+  if (pair2.length) wrap.appendChild(h('div', { class: 'illu-feat__pair' }, pair2.map((w, i) => illuCard(w, String(i + 5).padStart(2, '0'), false, SZ.half))));
 
   // 其余 12 件：CSS 多列自然流（无纵向空洞）；首屏外一律 lazy 加载
   const restWrap = h('div', { class: 'works-masonry' });
-  rest.forEach((w) => restWrap.appendChild(workCard(w, 0, { eager: false, noReveal: true })));
+  rest.forEach((w) => restWrap.appendChild(workCard(w, 0, { eager: false, noReveal: true, sizes: SZ.masonry })));
   wrap.appendChild(restWrap);
   return wrap;
 }
