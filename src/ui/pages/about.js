@@ -10,6 +10,13 @@ import { imgEl } from '../components/media.js';
 
 const NEUTRAL_BIO = '以插画与漫画为主要创作方向，关注角色、叙事与氛围表达。';
 
+// 响应式 sizes（按真实展示宽度；P0 性能专项加入，视觉/版式不变）
+const SZ = {
+  certMain: '(max-width: 600px) 92vw, (max-width: 1024px) 46vw, 560px',
+  certAux: '(max-width: 600px) 30vw, (max-width: 1024px) 31vw, 330px',
+  lightbox: '(max-width: 600px) 92vw, 800px',
+};
+
 const EDU = [
   { yr: '2017.9 – 2021.7', h: '中国传媒大学南广学院 · 漫画与插画｜本科', p: '本科阶段主修漫画叙事与插画创作，毕业设计为 42 页漫画。' },
   { yr: '2024.4 – 2026.3', h: '日本代代木动画学院（代々木アニメーション学院）· 漫画（进修）｜专门学校', p: '漫画专业进修；毕业制作（2026 年 2 月）共 27 页。' },
@@ -70,7 +77,7 @@ function railLink(num, title, targetId) {
 function openLightbox(src, alt) {
   const overlay = h('div', { class: 'modal-overlay', on: { click: (e) => { if (e.target === overlay) overlay.remove(); } } },
     h('div', { class: 'lightbox', onclick: (e) => e.stopPropagation() }, [
-      imgEl(src, null, alt, { w: 800, h: 1100 }),
+      imgEl(src, null, alt, { w: 800, h: 1100, sizes: SZ.lightbox }),
       h('button', { class: 'lightbox__close', on: { click: () => overlay.remove() } }, '×'),
     ]));
   document.body.appendChild(overlay);
@@ -95,13 +102,13 @@ export async function aboutView() {
     ? h('div', { class: 'cv-cert-layout' }, [
         mainCert ? h('div', { class: 'cv-cert-main' }, [
           h('button', { class: 'cv-cert', type: 'button', on: { click: () => openLightbox(mainCert.cover, mainCert.title) } }, [
-            h('div', { class: 'cv-cert__media' }, imgEl(mainCert.cover, null, mainCert.title, { w: mainCert.coverW, h: mainCert.coverH })),
+            h('div', { class: 'cv-cert__media' }, imgEl(mainCert.cover, null, mainCert.title, { w: mainCert.coverW, h: mainCert.coverH, sizes: SZ.certMain })),
             h('div', { class: 'cv-cert__title' }, mainCert.title),
           ]),
         ]) : null,
         auxCerts.length ? h('div', { class: 'cv-cert-aux' }, auxCerts.map((c) =>
           h('button', { class: 'cv-cert', type: 'button', on: { click: () => openLightbox(c.cover, c.title) } }, [
-            h('div', { class: 'cv-cert__media' }, imgEl(c.cover, null, c.title, { w: c.coverW, h: c.coverH })),
+            h('div', { class: 'cv-cert__media' }, imgEl(c.cover, null, c.title, { w: c.coverW, h: c.coverH, sizes: SZ.certAux })),
             h('div', { class: 'cv-cert__title' }, c.title),
           ]))) : null,
       ])
