@@ -10,6 +10,10 @@ import { emptyState } from '../components/primitives.js';
 import { typeName } from '../../data/types.js';
 import { natureSub } from '../components/label.js';
 
+// 详情页：主封面展示宽 ~1180 / 多图 ~760；P0 性能专项加入 sizes，视觉不变
+const SZ_DETAIL = '(max-width: 600px) 92vw, 1180px';
+const SZ_SHOT = '(max-width: 600px) 92vw, 760px';
+
 // 与全站展签 / 出版物语言一致（不虚构：类目与 ORIGINAL 标记均来自真实字段）
 const EN = { illustration: 'ILLUSTRATION', comic: 'COMIC', oil: 'OIL PAINTING', certificate: 'CERTIFICATE' };
 
@@ -25,7 +29,7 @@ export async function workDetailView(params) {
 
   // 首屏：大尺寸封面（作品为绝对主角）
   // 首屏主封面属于首视口核心内容，eager + high priority
-  const cover = h('div', { class: 'detail__cover' }, imgEl(work.cover, null, work.title, { eager: true, w: work.coverW, h: work.coverH }));
+  const cover = h('div', { class: 'detail__cover' }, imgEl(work.cover, null, work.title, { eager: true, w: work.coverW, h: work.coverH, sizes: SZ_DETAIL }));
 
   // 文字信息后置（无值时整行不渲染，杜绝 '—' 占位与空行）
   const metaRows = [];
@@ -61,7 +65,7 @@ export async function workDetailView(params) {
   const series = seriesImgs.length
     ? h('div', { class: 'detail__series' },
         seriesImgs.map((v, i) => h('div', { class: 'detail__shot' }, [
-          imgEl(v, null, `${work.title} 图 ${i + 2}`, { w: work.coverW, h: work.coverH }),
+          imgEl(v, null, `${work.title} 图 ${i + 2}`, { w: work.coverW, h: work.coverH, sizes: SZ_SHOT }),
           h('span', { class: 'detail__shot-cap' }, `FIG. ${String(i + 2).padStart(2, '0')}`),
         ])))
     : null;
