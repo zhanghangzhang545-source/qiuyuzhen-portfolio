@@ -17,6 +17,17 @@ import { WORK_TYPES, typeName } from '../../data/types.js';
 const NEUTRAL_BIO = '以插画与漫画为主要创作方向，关注角色、叙事与氛围表达。';
 const byId = (arr, id) => arr.find((w) => w.id === id) || null;
 
+// 响应式 sizes（按真实展示宽度；P0 性能专项加入，视觉/版式不变）
+const SZ = {
+  hero: '(max-width: 600px) 100vw, 1440px',
+  full: '(max-width: 600px) 92vw, (max-width: 1024px) 62vw, 1180px',
+  half: '(max-width: 600px) 46vw, (max-width: 1024px) 46vw, 560px',
+  compositeMain: '(max-width: 1024px) 90vw, 940px',
+  oilSmall: '(max-width: 1024px) 42vw, 210px',
+  comicFeatCover: '(max-width: 1024px) 92vw, 360px',
+  comicFeatPages: '(max-width: 600px) 30vw, (max-width: 1024px) 31vw, 370px',
+};
+
 /** 专题标题（与 Works 章节系统视觉一致：编号 / 英文 / 中文 / 上分隔线） */
 function topicHead(num, en, zh) {
   return h('div', { class: 'works-chapter' }, [
@@ -56,7 +67,7 @@ export async function homeView() {
 
   // —— 第一屏：深色，《旅途》为视觉底层（方向保留） ——
   const hero = h('section', { class: 'hero' }, [
-    h('div', { class: 'hero__media' }, imgEl(heroArt.cover, 'hero__img', heroArt.title, { eager: true, w: heroArt.coverW, h: heroArt.coverH })),
+    h('div', { class: 'hero__media' }, imgEl(heroArt.cover, 'hero__img', heroArt.title, { eager: true, w: heroArt.coverW, h: heroArt.coverH, sizes: SZ.hero })),
     h('div', { class: 'hero__scrim' }),
     h('div', { class: 'container hero__inner' }, [
       h('div', { class: 'hero__copy' }, [
@@ -76,18 +87,18 @@ export async function homeView() {
 
   // —— 专题 A：插画专题（接雨草树林2.0ver 整幅 + 梦里的风景 / 无可磨灭的存在 双联；取消右侧空信息列） ——
   const aBanner = (i01 && h('a', { class: 'feat-link', href: '#/work/i01' }, [
-    imgEl(i01.cover, 'feat-img', i01.title, { w: i01.coverW, h: i01.coverH }),
+    imgEl(i01.cover, 'feat-img', i01.title, { w: i01.coverW, h: i01.coverH, sizes: SZ.full }),
     workLabel({ num: '01', en: 'ILLUSTRATION', title: i01.title, sub: 'ORIGINAL WORK' }),
   ])) || null;
 
   const aPair = (i12 && i10 && h('div', { class: 'feat-portrait' }, [
     h('div', { class: 'feat-portrait__pair' }, [
       h('a', { class: 'feat-link', href: '#/work/i12' }, [
-        imgEl(i12.cover, 'feat-img', i12.title, { w: i12.coverW, h: i12.coverH }),
+        imgEl(i12.cover, 'feat-img', i12.title, { w: i12.coverW, h: i12.coverH, sizes: SZ.half }),
         workLabel({ num: '02', en: 'ILLUSTRATION', title: i12.title, sub: 'ORIGINAL WORK' }),
       ]),
       h('a', { class: 'feat-link', href: '#/work/i10' }, [
-        imgEl(i10.cover, 'feat-img', i10.title, { w: i10.coverW, h: i10.coverH }),
+        imgEl(i10.cover, 'feat-img', i10.title, { w: i10.coverW, h: i10.coverH, sizes: SZ.half }),
         workLabel({ num: '03', en: 'ILLUSTRATION', title: i10.title, sub: 'ORIGINAL WORK' }),
       ]),
     ]),
@@ -104,7 +115,7 @@ export async function homeView() {
       topicHead('02', 'FEATURE COMIC', '核心漫画'),
       h('div', { class: 'comics__feature' }, [
         h('a', { class: 'comics__cover feat-link', href: `#/comic/${yoyogi.id}` },
-          imgEl(yoyogi.cover, null, yoyogi.title, { w: yoyogi.coverW, h: yoyogi.coverH })),
+          imgEl(yoyogi.cover, null, yoyogi.title, { w: yoyogi.coverW, h: yoyogi.coverH, sizes: SZ.comicFeatCover })),
         h('div', { class: 'comics__feature-body' }, [
           h('div', { class: 'comics__feature-meta' }, [
             h('span', { class: 'comics__feature-proj' }, '代代木动画学院 毕业作品'),
@@ -112,7 +123,7 @@ export async function homeView() {
             h('a', { class: 'link link--light', href: `#/comic/${yoyogi.id}` }, ['开始阅读', h('span', { class: 'arrow' }, '→')]),
           ]),
           h('div', { class: 'comics__pages' },
-            yoyogi.pages.slice(0, 3).map((p) => imgEl(p.image, null, `${yoyogi.title} 内页`, { w: p.w, h: p.h }))),
+            yoyogi.pages.slice(0, 3).map((p) => imgEl(p.image, null, `${yoyogi.title} 内页`, { w: p.w, h: p.h, sizes: SZ.comicFeatPages }))),
         ]),
       ]),
     ]),
@@ -121,16 +132,16 @@ export async function homeView() {
   // —— 专题 C：综合创作专题（献上战舞 + 两幅油画） ——
   const composite = h('div', { class: 'composite' }, [
     i13 ? h('a', { class: 'composite__main feat-link', href: '#/work/i13' }, [
-      imgEl(i13.cover, 'feat-img', i13.title, { w: i13.coverW, h: i13.coverH }),
+      imgEl(i13.cover, 'feat-img', i13.title, { w: i13.coverW, h: i13.coverH, sizes: SZ.compositeMain }),
       workLabel({ num: '04', en: 'ILLUSTRATION', title: i13.title, sub: 'ORIGINAL WORK' }),
     ]) : null,
     h('div', { class: 'composite__oils' }, [
       (oil1 && h('a', { class: 'composite__oil feat-link', href: '#/work/oil1' }, [
-        imgEl(oil1.cover, 'feat-img', oil1.title, { w: oil1.coverW, h: oil1.coverH }),
+        imgEl(oil1.cover, 'feat-img', oil1.title, { w: oil1.coverW, h: oil1.coverH, sizes: SZ.oilSmall }),
         workLabel({ num: '01', en: 'OIL PAINTING', title: oil1.title, sub: 'ORIGINAL WORK' }),
       ])) || null,
       (oil2 && h('a', { class: 'composite__oil feat-link', href: '#/work/oil2' }, [
-        imgEl(oil2.cover, 'feat-img', oil2.title, { w: oil2.coverW, h: oil2.coverH }),
+        imgEl(oil2.cover, 'feat-img', oil2.title, { w: oil2.coverW, h: oil2.coverH, sizes: SZ.oilSmall }),
         workLabel({ num: '02', en: 'OIL PAINTING', title: oil2.title, sub: 'ORIGINAL WORK' }),
       ])) || null,
     ].filter(Boolean)),
