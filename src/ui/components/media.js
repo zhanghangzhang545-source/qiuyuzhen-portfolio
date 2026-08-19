@@ -31,6 +31,11 @@ export function toImageSrc(value) {
 // 默认 sizes：手机 92vw，桌面按 960 选择（约 480/960 档）。调用点可覆盖。
 const SIZES_DEFAULT = '(max-width: 600px) 92vw, 960px';
 
+// 懒加载挂起检测：仅当图片进入视口附近（rootMargin）后才启动计时，
+// 避免对"尚未开始 lazy 加载"的屏幕外资源误判为挂起、产生多余 HEAD/重试/主动请求。
+const NEAR_MARGIN = '800px';
+const WATCH_MS = 10000;
+
 /** 构造响应式衍生描述；未命中返回 null */
 function buildResponsive(value) {
   const m = OPTIM && OPTIM[value];
@@ -170,10 +175,25 @@ function plainImg(value, className, alt, opts) {
       else handleFail();
     }, WATCH_MS);
   };
-  const setSrc = (url) => { e.src = url; armWatch(); };
+  const cancelWatch = () => { if (watch) { clearTimeout(watch); watch = null; } };
+  // 仅设置地址；不在此处启动 watchdog（懒加载图片创建时不得主动请求/重试）
+  const setSrc = (url) => { e.src = url; };
 
   e.addEventListener('error', handleFail);
-  e.addEventListener('load', () => { done = true; if (watch) clearTimeout(watch); });
+  e.addEventListener('load', () => { done = true; cancelWatch(); });
+
+  // 懒加载挂起检测：仅当图片进入视口附近（rootMargin）后才启动计时；
+  // 屏幕外资源不 HEAD、不重试、不主动请求。进入附近后若仍未 load 才算"挂起"。
+  if ('IntersectionObserver' in window) {
+    const io = new IntersectionObserver((entries) => {
+      for (const en of entries) {
+        if (en.isIntersecting) { if (!done) armWatch(); io.disconnect(); }
+      }
+    }, { rootMargin: NEAR_MARGIN });
+    io.observe(e);
+  } else if (e.loading === 'eager') {
+    armWatch();
+  }
 
   setSrc(src);
   return e;
@@ -182,15 +202,15 @@ function plainImg(value, className, alt, opts) {
 // —— 通用重试/ watchdog（用于响应式 <picture> 的 <img>）——
 function attachRetry(img, restore) {
   const MAX_RETRY = 2;
-  const WATCH_MS = 10000;
   let attempts = 0;
   let done = false;
+  let watch = null;
 
   const showFallback = () => {
     if (done) return;
     done = true;
     img.dataset.failed = '1';
-    // 兜底占位（用图片自身尺寸）
+    // 兜底占位（用图片自身尺寸）；绝不回退原始高清大图
     const w = parseInt(img.getAttribute('width') || '600', 10);
     const h = parseInt(img.getAttribute('height') || '800', 10);
     img.removeAttribute('srcset');
@@ -198,6 +218,7 @@ function attachRetry(img, restore) {
     img.src = neutralFail(w, h);
   };
 
+  // 有限重试：仅在真实 error 事件触发
   const handleFail = () => {
     if (done) return;
     if (attempts >= MAX_RETRY) { showFallback(); return; }
@@ -212,18 +233,30 @@ function attachRetry(img, restore) {
       .catch(() => { clearTimeout(timer); restore(n); });
   };
 
-  let watch = null;
   const armWatch = () => {
     if (watch) clearTimeout(watch);
     watch = setTimeout(() => {
       if (done) return;
       if (attempts >= MAX_RETRY) showFallback();
-      else handleFail();
+      else handleFail();   // 仅进入视口附近后才启动 → 此时仍未 load 才算"挂起"
     }, WATCH_MS);
   };
+  const cancelWatch = () => { if (watch) { clearTimeout(watch); watch = null; } };
 
   img.addEventListener('error', handleFail);
-  img.addEventListener('load', () => { done = true; if (watch) clearTimeout(watch); });
-  // 初始挂起保护
-  armWatch();
+  img.addEventListener('load', () => { done = true; cancelWatch(); });
+
+  // 关键：lazy 图片创建时不立即 watchdog。
+  // 仅当图片进入视口附近（rootMargin 800px）后才启动挂起计时；
+  // 屏幕外资源不 HEAD、不重试、不主动请求。
+  if ('IntersectionObserver' in window) {
+    const io = new IntersectionObserver((entries) => {
+      for (const en of entries) {
+        if (en.isIntersecting) { if (!done) armWatch(); io.disconnect(); }
+      }
+    }, { rootMargin: NEAR_MARGIN });
+    io.observe(img);
+  } else if (img.loading === 'eager') {
+    armWatch();
+  }
 }
