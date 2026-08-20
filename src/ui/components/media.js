@@ -10,6 +10,23 @@
 
 import { OPTIM } from '../../../assets/optimized/manifest.js';
 
+// —— P0-C：optimized 衍生图经 jsDelivr CDN 供图（绑定 commit SHA，避免 CDN 缓存旧素材）——
+//  画质/档位/Retina/LQIP 全部不变，仅替换资源基址；HTML/JS 仍由 GitHub Pages 提供。
+//  原图（assets/ 原始目录）完整保留在 GitHub，不删除、不改压缩参数。
+//  ?img=gh → 临时回退 GitHub Pages 供图（仅用于 A/B 对照测量，同代码同画质同布局）。
+const CDN_BASE =
+  'https://cdn.jsdelivr.net/gh/zhanghangzhang545-source/qiuyuzhen-portfolio@7920154fb60bc5238a37abbd8790ea409f7f3db5/';
+const IMG_CDN = (() => {
+  try {
+    return new URLSearchParams(window.location.search).get('img') !== 'gh';
+  } catch (e) {
+    return true;
+  }
+})();
+function cdn(u) {
+  return IMG_CDN && typeof u === 'string' && u.indexOf('assets/optimized/') === 0 ? CDN_BASE + u : u;
+}
+
 /** 中性「加载失败」占位（仅作异常兜底，不含营销/DEMO 文案） */
 function neutralFail(w, h) {
   const W = w || 600, H = h || 800;
@@ -40,9 +57,9 @@ const WATCH_MS = 10000;
 function buildResponsive(value) {
   const m = OPTIM && OPTIM[value];
   if (!m) return null;
-  const webpSrcset = Object.keys(m.webp).map((w) => `${m.webp[w]} ${w}w`).join(', ');
-  const jpgSrcset = Object.keys(m.jpg).map((w) => `${m.jpg[w]} ${w}w`).join(', ');
-  const fallback = (m.jpg && Object.values(m.jpg)[0]) || (m.webp && Object.values(m.webp)[0]) || '';
+  const webpSrcset = Object.keys(m.webp).map((w) => `${cdn(m.webp[w])} ${w}w`).join(', ');
+  const jpgSrcset = Object.keys(m.jpg).map((w) => `${cdn(m.jpg[w])} ${w}w`).join(', ');
+  const fallback = cdn((m.jpg && Object.values(m.jpg)[0]) || (m.webp && Object.values(m.webp)[0]) || '');
   const lqip = m.lqip || '';
   return { webpSrcset, jpgSrcset, fallback, w: m.w, h: m.h, lqip };
 }
