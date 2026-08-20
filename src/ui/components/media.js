@@ -43,7 +43,8 @@ function buildResponsive(value) {
   const webpSrcset = Object.keys(m.webp).map((w) => `${m.webp[w]} ${w}w`).join(', ');
   const jpgSrcset = Object.keys(m.jpg).map((w) => `${m.jpg[w]} ${w}w`).join(', ');
   const fallback = (m.jpg && Object.values(m.jpg)[0]) || (m.webp && Object.values(m.webp)[0]) || '';
-  return { webpSrcset, jpgSrcset, fallback, w: m.w, h: m.h };
+  const lqip = m.lqip || '';
+  return { webpSrcset, jpgSrcset, fallback, w: m.w, h: m.h, lqip };
 }
 
 /**
@@ -94,6 +95,26 @@ function responsiveEl(desc, className, alt, opts) {
   e.srcset = desc.jpgSrcset;
   e.sizes = sizes;
   e.src = desc.fallback;
+
+  // LQIP 即时低清预览：用真实 Hero/作品缩略（内联 data-URI，无网络）作瞬时背景，
+  // 高清图加载完成后淡入覆盖。禁止灰块/空白块/假图片；最终看到的是正常高清作品。
+  if (desc.lqip) {
+    e.style.backgroundImage = `url("${desc.lqip}")`;
+    e.style.backgroundSize = 'cover';
+    e.style.backgroundPosition = 'center';
+    e.style.backgroundRepeat = 'no-repeat';
+    e.style.opacity = '0';
+    e.style.transition = 'opacity .45s ease';
+    const reveal = () => { e.style.opacity = '1'; };
+    if (e.complete && e.naturalWidth) {
+      reveal();
+    } else {
+      e.addEventListener('load', reveal, { once: true });
+      // 失败兜底（中性占位）也会触发 load → 同样淡入显示，不会卡在透明
+      e.addEventListener('error', () => { e.style.opacity = '1'; }, { once: true });
+    }
+  }
+
   pic.appendChild(e);
 
   // 重试：重新应用优化源（带缓存击穿），绝不回退原始高清
