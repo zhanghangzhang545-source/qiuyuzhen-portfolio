@@ -38,8 +38,10 @@
 }
 /* P0-2-A（最终修复）：大写英文 QIU / YUZHEN 两行作为主视觉身份（最大层级）；
    中文姓名降为次级（小一号、不抢主视觉）。仅调行距/字距/字号/字重/左距与间距，不重做整站。 */
+/* P1-1：QIU / YUZHEN 两行主视觉身份——小幅 typography 精修（不改结构）：
+   行距 1.04 → 1.12（两行之间更透气，不再"糊在一起"）、字重 800 → 700（降厚重感）、字距 .03em → .04em（字母间稍松）。 */
 .hero__name {
-  font-family: var(--font-display); font-weight: 800; line-height: 1.04; letter-spacing: .03em;
+  font-family: var(--font-display); font-weight: 700; line-height: 1.12; letter-spacing: .04em;
   font-size: clamp(48px, 9.2vw, 132px); margin: 0; color: var(--ink-on-dark); text-transform: uppercase;
 }
 .hero__name .hero__line { display: block; }   /* 两行堆叠：QIU / YUZHEN（行距 1.04 透气，不糊在一起） */
@@ -147,7 +149,7 @@
 /* A1 桌面反馈：姓名行（中文宋体字标 + 大写拼音小一级同排，拼音不抢主名层级） */
 .intro-teaser__name-row { display: flex; align-items: baseline; gap: var(--s4); flex-wrap: wrap; margin: var(--s3) 0 var(--s4); }
 .intro-teaser__name-row h2 { margin: 0; }
-.intro-teaser__pinyin { font-family: var(--font-display); font-size: clamp(13px, 1.3vw, 17px); letter-spacing: normal; color: var(--ink-3); font-weight: 400; }
+.intro-teaser__pinyin { font-family: var(--font-display); font-size: clamp(13px, 1.3vw, 17px); letter-spacing: normal; color: var(--ink-3); font-weight: 400; white-space: nowrap; }
 /* A1 桌面反馈：人物介绍正文桌面端适当提高字号与行高（仅本区，不全站放大） */
 @media (min-width: 721px) {
   .intro-teaser .lead { font-size: clamp(21px, 1.9vw, 25px); line-height: 1.8; }

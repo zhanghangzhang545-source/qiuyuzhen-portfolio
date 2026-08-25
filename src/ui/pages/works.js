@@ -211,9 +211,13 @@ export async function worksView(params, query) {
         return byCustom(a, b);
       }
     });
-    // P0-5：默认「全部作品」页显示精选数与总数（精选 5 件 · 全部 25 件）；分类页保持「共 X 件」。
+    // 「全部作品」默认页（无筛选）判定：无类型 / 无关键词 / 无阶段 / 无年份 / 无自定义排序时为 true；
+    // 任一筛选生效即回退到「完整章节结构」渲染（漫画 / 插画 / 油画三章均按筛选后真实数据渲染）。
+    const isDefaultView = !t && !q.q && !q.stage && !q.year && (!q.sort || q.sort === 'manual');
+
+    // 数量文案：默认视图显示「精选 N 件 · 全部 M 件」；一旦有筛选（关键词 / 年份 / 阶段 / 自定义排序）显示「共 X 件」。
     const countEl = head.querySelector('.count');
-    if (!t) {
+    if (isDefaultView) {
       const picksCount = list.filter((w) => w.worksPick && w.type !== 'certificate' && w.public !== false).length;
       countEl.textContent = `精选 ${picksCount} 件 · 全部 ${data.length} 件`;
     } else {
@@ -242,17 +246,18 @@ export async function worksView(params, query) {
       if (oils.length) addChapter('oil', oils.length, h('div', { class: 'oil-gallery' }, oils.map((w, i) => oilItem(w, i, i === 0))));
     } else if (t === 'illustration') {
       if (illus.length) addChapter('illustration', illus.length, illustrationGrid(illus, true));
+    } else if (isDefaultView) {
+      // 默认「全部作品」无筛选视图：仅展示精选入口（Works Pick 1/3/1 = 5 件代表），由下方 buildPicks 追加；
+      // 不把 25 件全部铺出。完整列表由各分类页（/works/comic、/works/illustration、/works/oil）承载。
     } else {
-      // 默认「全部作品」页：仅展示精选入口（Works Pick 1/3/1 = 5 件代表，baseline：
-      // comic-yoyogi2026 / i01 / i12 / i13 / oil1），不把 25 件全部铺出；
-      // 各分类完整页（/works/comic、/works/illustration、/works/oil）仍展示全部作品。
-      // 精选入口由下方 isDefaultView 分支统一追加（buildPicks）。
+      // 默认视图但有筛选（关键词 / 年份 / 阶段 / 自定义排序）：按筛选后真实数据渲染完整三章结构。
+      if (comics.length) addChapter('comic', comics.length, h('div', { class: 'comic-list' }, comics.map((w, i) => comicRow(w, i, i === 0))));
+      if (illus.length) addChapter('illustration', illus.length, illustrationGrid(illus, true));
+      if (oils.length) addChapter('oil', oils.length, h('div', { class: 'oil-gallery' }, oils.map((w, i) => oilItem(w, i, i === 0))));
     }
     results.appendChild(wrap);
 
     // —— 「全部作品」默认页精选入口（桌面 + 手机统一；仅默认无筛选视图）——
-    // 进入具体分类页（/works/comic、/works/illustration、/works/oil）或筛选后回完整章节结构。
-    const isDefaultView = !t && !q.q && !q.stage && !q.year && (!q.sort || q.sort === 'manual');
     page.classList.toggle('has-picks', isDefaultView);
     if (isDefaultView) {
       results.appendChild(h('div', { class: 'works-picks' }, buildPicks(comics, illus, oils)));

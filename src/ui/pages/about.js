@@ -10,7 +10,7 @@ import { imgEl } from '../components/media.js';
 
 // 响应式 sizes（按真实展示宽度；P0 性能专项加入，视觉/版式不变）
 const SZ = {
-  certPortrait: '(max-width: 600px) 46vw, (max-width: 1024px) 31vw, 330px',
+  certPortrait: '(max-width: 600px) 92vw, (max-width: 1024px) 31vw, 330px',
   certLandscape: '(max-width: 600px) 92vw, (max-width: 1024px) 46vw, 560px',
   lightbox: '(max-width: 600px) 92vw, 800px',
 };
@@ -42,14 +42,17 @@ function railLink(num, title, targetId) {
   }, [h('span', { class: 'about__rail-num' }, num), h('span', { class: 'about__rail-title' }, title)]);
 }
 
-/** 轻量灯箱：点击证书放大查看 */
+/** 轻量灯箱：点击证书放大查看（P1-2：支持 Esc 关闭 + 关闭按钮 aria-label） */
 function openLightbox(src, alt) {
-  const overlay = h('div', { class: 'modal-overlay', on: { click: (e) => { if (e.target === overlay) overlay.remove(); } } },
+  const close = () => { document.removeEventListener('keydown', onKey); overlay.remove(); };
+  const onKey = (e) => { if (e.key === 'Escape' || e.key === 'Esc') close(); };
+  const overlay = h('div', { class: 'modal-overlay', on: { click: (e) => { if (e.target === overlay) close(); } } },
     h('div', { class: 'lightbox', onclick: (e) => e.stopPropagation() }, [
       imgEl(src, null, alt, { w: 800, h: 1100, sizes: SZ.lightbox }),
-      h('button', { class: 'lightbox__close', on: { click: () => overlay.remove() } }, '×'),
+      h('button', { class: 'lightbox__close', type: 'button', 'aria-label': '关闭', on: { click: () => close() } }, '×'),
     ]));
   document.body.appendChild(overlay);
+  document.addEventListener('keydown', onKey);
 }
 
 export async function aboutView() {
@@ -113,7 +116,8 @@ export async function aboutView() {
         h('div', { class: 'about__content' }, [
           section('sec-intro', '01', 'INTRO', h('div', {}, [
             h('p', { class: 'serif-lead' }, '插画与漫画创作者'),
-            h('p', { class: 'secondary', style: { marginTop: 'var(--s4)', lineHeight: '1.8' } }, '本科毕业于中国传媒大学南广学院漫画与插画专业，后于日本代代木动画学院进修漫画。创作涵盖插画、漫画与油画，持续探索角色、叙事与氛围表达。'),
+            // P0-4：INTRO 个人简介读取真实 About 数据（A.bio），后台改 bio 后此处同步更新；教育经历由 EDU 数据驱动（下方 sec-edu）。
+            h('p', { class: 'secondary', style: { marginTop: 'var(--s4)', lineHeight: '1.8' } }, A.bio || NEUTRAL_BIO),
             h('div', { class: 'about__contact', style: { marginTop: 'var(--s5)' } }, CONTACT.map((c) =>
               h('div', { class: 'about__contact-row' }, [h('span', { class: 'k' }, c.k), h('span', {}, c.v)]))),
           ])),

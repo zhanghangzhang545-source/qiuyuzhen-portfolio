@@ -1,100 +1,75 @@
-# QIU YUZHEN 作品集 · 交付说明
+# QIU YUZHEN 作品集 · 客户交付说明（CLIENT DELIVERY）
 
-> 设计方向：邱钰真（QIU YUZHEN）· 插画 / 漫画 / 油画 个人作品集
-> 技术形态：零依赖 ESM 单页应用（hash 路由 + 原生 hyperscript），已接入 Supabase 真实云端（只读 + 结构化写入 + 媒体发布生命周期）；`?mock=1` 可走 Mock 回滚预览通道。
-
----
-
-## 阶段状态
-
-### 基础工程 base-final-3（已冻结，作为底层）
-基础工程已通过人工验收并冻结，包含：首页 / Works / About 三大基础版式、美拉德（Maillard）主色体系、5 部漫画连续纵向阅读、真实作品顺序与内容、首屏封面 eager/high 其余 lazy、About 时间线降序。
-
-### Phase 2 Final — Editorial Visual Identity（已通过人工视觉验收，版式/配色冻结）
-第二阶段目标：在不改已冻结版式/配色/结构/连续阅读的前提下，建立成熟、克制、有艺术出版物气质的编辑式视觉识别系统（减法 + 事实纠正）。
-
-**视觉系统已通过人工像素级视觉验收并正式冻结**（字标 / 章节 / 展签 / 配色 / 纸张 / 漫画深咖区 / 260ms 交互 / 手机筛选 / 连续阅读不再修改）。后续轮次仅做数据层、证书方向、后台字段契约等非视觉结果修复。
+艺术家：邱钰真（QIU YU ZHEN）· 插画 / 漫画 / 油画 个人作品集
+技术形态：零依赖静态网站（hash 路由单页应用），已接入 Supabase 真实云端（只读 + 后台结构化写入）。
 
 ---
 
-## Phase 2 Final Gate 收口轮次（多轮，仅修非视觉项）
+## 一、正式网站地址
 
-### Final Gate 末轮修正（2026-08-22，Phase 3 启动前的最后一次视觉/文档/隐私收口轮）
-本轮 4 项，均为 Phase 3 启动前对既有视觉/文档/隐私的收口，不进入 Phase 3 功能开发：
+- **作品集前台（公开）**：https://zhanghangzhang545-source.github.io/qiuyuzhen-portfolio/
+- **后台管理**：https://zhanghangzhang545-source.github.io/qiuyuzhen-portfolio/#/admin/login
 
-1. **About 证书视觉第一张修正**：客户所指"页面上看到的第一张奖状横过来"是**视觉首张**，非内部 ID。
-   已将正确朝向衍生图 `c01_rot.jpg`（横版）所在的横版组整体前置，使视觉第一张即为横向 c01_rot；
-   其余证书保持真实比例自然排列（竖并排 / 横宽展），不旋转文字、不裁切。
-   （`src/ui/pages/about.js`：landscape 行渲染于 portrait 行之前。）
-2. **Git 历史隐私清理（已执行，2026-08-22）**：
-   - 废弃旧 `_ghpages`(7126b5d 单 commit) + `commit --amend` + 裸 `--force` 方案（基线错误、无法清多 commit 历史、有覆盖风险）。
-   - 新建独立安全目录 `_git_history_safe/`，从真实 `origin/main` fresh clone，执行前验证 `HEAD == origin/main == 69674e4b932ecb5b32753e1d4f16e7f115b40c26`。
-   - 执行前确认 c07 敏感文件（原图 + 480w jpg/webp 共 3 个）存在于 HEAD 树与多历史 commit。
-   - 已用 `git filter-repo --sensitive-data-removal --invert-paths`（git-filter-repo 2.47.0）全历史路径删除，重写 **1926 / 1926 commits**；推送后远程 `main = 1785fbefe1ae2cdcf6d6aa29d2c18aef0d8d9df1`（--force-with-lease）。
-   - 验收（2026-08-22 执行；2026-08-24 复验）：main 分支 Pages + raw 四项 c07 访问**全部 404**；旧 SHA `69674e4…` 经 raw 亦**已不可达（404）**——GitHub Support 工单 #4689581 平台侧缓存对象已清除，隐私清理 100% 完成。
-   - 详见 `_git_history_safe/_c07_cleanup_execution_report.md` 与 `GIT_HISTORY_CLEANUP_PLAN.md`；本地回滚备份 `repo_inspect_pre_cleanup_202608221914.tar.gz`。
-3. **PHASE3_REQUIREMENTS.md 修正**：
-   - `localStorage` 描述改为"同浏览器/同 origin 可保留，但非服务器持久化、不可跨设备/跨浏览器同步"。
-   - 封面 / 非漫画多图 / `type` 分类：区分 UI 已有 Mock（存 localStorage）vs Phase 3 替换真实对象存储 / 真实持久化。
-   - About 基础资料 / 教育 / 经历 / 技能 / 荣誉 / 联系方式：改为"Phase 3 新增 UI + 数据持久化"（当前正式后台无对应管理页）。
-   - `workNature` 取值契约统一为 `original | fan`，禁止文档再写 `fan-work`。
-   - 首页精选（`homeFeatured`）与 Works 默认页精选（`worksPicks`）拆分为两个独立后台控制维度，不再永久共用单一 `featured`。
-4. **完整回归 16 截图**（Home / Works / Comics / Illustration / Oil / About / Work Detail / Comic Reader × 1440+390）：
-   每页自动检查 `pending_img / overflow / 404 / console_error` 均 = 0（见 `_final_gate_round3_report.md`）。
-
-### 本轮落实要点（11 项，视觉冻结前）
-1. **作品性质字段（事实纠正）**：数据层为漫画新增 `workNature: 'original' | 'fan'`。
-   CP30《舞机》= `fan`（客户明确的 Fan Work，不拥有原作 IP）；其余 4 部确认原创 = `original`。
-   所有展签的"原创 / 同人"标记一律由 `natureSub(work)` 从真实字段生成
-   （原创漫画 → `ORIGINAL COMIC`，同人 → `FAN WORK`），**严禁通过标题硬编码判断**。
-2. **页脚中立化**：删除"所有作品均为原创"，改为中性 `© 2026 QIU YUZHEN · PORTFOLIO`。
-3. **Hero 减法**：删除旧编号 `01 / 05`，Hero 仅保留极小身份文字 `Illustration & Comic`；正式章节从 `01` 起（插画专题 / 核心漫画 / 综合创作）。
-4. **裸 QY 全部移除**：章节右侧的 `QY` 占位字母组合全部删除；字标仅保留完整 `QIU YUZHEN`，真正的 QY monogram 待后续单独人工确认。
-5. **展签两级系统**：
-   - A 级（Full Label）：首页精选、Works 前 6 件重点作品、漫画核心项目 → 细线 + 编号 + 类目 + 标题 + 真实属性 + VIEW PROJECT。
-   - B 级（Compact Label）：Works 普通 Archive 作品 → 仅 标题 + 类目，无编号 / 长细线 / ORIGINAL WORK / VIEW PROJECT。
-6. **漫画目录去重**：左 `01 / COMIC` + 标题 + `年份 · 性质`，右 `27P →`；删除"共 27 页"等重复表达。
-7. **连续漫画页码**：桌面保留 `P. 01 / P. 02…`（约 10px、极弱灰褐、无框、不覆盖作品）；`≤720px` 隐藏，避免阅读噪音。
-8. **微交互**：图片 hover 时长 `420ms → 260ms`，保持 `scale 1.01–1.015`；新增 `:focus-visible / :focus-within` 轻反馈，键盘可访问。
-9. **字标减法**：本轮仅保留完整英文字标作主识别，不新增 QY 装饰。
-10. **手机端**：`≤720px` 删除 VIEW PROJECT 强制显示（卡片可点击，不重复 CTA）；漫画页码隐藏。
-11. **未扩展**：视觉冻结轮仅修上述项，未改其他页面。
+> 后台需管理员账号登录；登录 ≠ 管理员，需命中后台白名单（is_admin）方可写入。
 
 ---
 
-## Phase 3 状态（已交付，Final Closure）
+## 二、后台能改什么（持有人自助，无需改代码）
 
-- **Phase 3-C1（只读接入，已冻结）**：Supabase 真实只读接入，前台读取 25 件作品 / 6 证书 / 110 漫画页真实数据；C1 集成测试 151/151 冻结。
-- **Phase 3-C2（结构化写入，已交付）**：作品 / 证书 / About / 漫画基本信息 + 排序真实写入（受 B1 RLS + `is_admin()` 守卫）；不传/替/删媒体、不写 Storage。C2 集成测试 203/203。
-- **Phase 3-C3（媒体写入 + 发布生命周期，RELEASE CANDIDATE）**：
-  - Storage 双桶（portfolio-private / portfolio-public）；上传落 private，**真实 publish 流程在 canonical flip 前完成 private→public Storage 拷贝并校验 public 对象真实存在**（item 1 修复）。
-  - 后台新增**草稿 / 发布 / 下架**生命周期：上传媒体不自动公开，管理员显式发布才公开；已发布可下架并重新发布；destructive physical delete 仍禁用。
-  - C3 集成测试 96/96（含真实双桶 Storage 拷贝、发布/下架/重发布、非管理员拒绝、发布失败回滚等）。
-- **正式环境配置**：前端仅持有 `SUPABASE_URL` + `SUPABASE_PUBLISHABLE_KEY`；缺失配置时**失败即报错（fail-closed），绝不静默回 Mock**。`?mock=1` 仍可用作本地回滚预览通道。
-- 交付与测试报告见 `FINAL_CLOSURE_REPORT.md` / `PHASE3_C3_REPORT.md`。
+登录后台后可在不接触代码的前提下维护：
 
----
-
-## 视觉识别设计语言（全站统一）
-
-- 字标：`QIU YUZHEN`（Songti 字形，字距 0.22em），无图形 Logo。
-- 章节系统：1px 墨线 + 编号 + EN 大写 tracking + CN 标题（home / Works / About 同源，深色版覆盖线色）。
-- 展签：美术馆展签语言（细线 + 编号 + 标题 + 极小辅助文字），不使用卡片背景。
-- 出版物细节：咖啡发丝线、边角编号、节页码、套准十字（每页 ≤1–2，不堆砌）。
-- 美拉德体系继续：暖白 / 米杏 / 咖啡 / 焦糖 / 灰褐 / 深炭，不新增主色；识别靠字形 / 比例 / 线 / 编号 / 展签。
-- 纸张质感：`body::before` SVG 噪声 opacity 0.018 + multiply，仅暖白、近不可见。
-
-## 验收原则
-若所有客户作品以灰矩形替换，站点仍呈现统一、成熟、可辨识的艺术作品集气质（80% 作品 / 20% 视觉识别）；视觉系统不喧宾夺主、不覆盖作品。
+- **作品（插画 / 漫画 / 油画）**：标题、简介、性质（原创 / 同人）、标签、年份、阶段、排序。
+- **漫画内页**：新增 / 替换内页图片、调整内页顺序。
+- **证书**：替换证书图片。
+- **关于页**：姓名、拼音、个人简介（bio）、创作方向、教育经历、工作 / 展览经历、技能、荣誉、联系方式。
+- **首页与作品库精选**：通过 `home_featured`（首页专题）与 `works_pick`（作品库默认页精选）两个**独立维度**控制哪些作品进入首页 / 作品库精选。
+- **媒体发布**：上传的媒体先存为草稿，由管理员显式「发布」才对公开；可「下架 / 重新发布」。物理删除为不可逆操作，默认禁用。
 
 ---
 
-## 本地预览
-本压缩包根目录即项目根（含 `index.html` 与 `src/`），无需再 `cd` 进入子目录。
+## 三、Works Pick 与 Home Featured 的区别（两个互相独立的维度）
+
+- **Home Featured（首页专题）**：控制首页三大专题（插画专题 / 核心漫画 / 油画作品）展示哪些作品及排序。改这里**只影响首页**，不影响作品库。
+- **Works Pick（作品库默认页精选）**：控制「全部作品」默认页的精选入口（采用 **1 部漫画 + 3 件插画 + 1 幅油画**的 1+3+1 结构，共 5 件代表）。改这里**只影响作品库默认页**，不影响首页。
+
+两者各自独立排序，互不打扰。当前 1+3+1 为基线代表作名单（comic-yoyogi2026 / i01 / i12 / i13 / oil1），可由后台随时替换，无需改代码。
+
+---
+
+## 四、排序规则
+
+- **作品列表（Works）**：默认 `manual` 排序，按后台设定的自定义权重（sort_order）排列；也可在前台按年份（新→旧 / 旧→新）排序。
+- **首页专题 / 作品库精选**：分别由 `home_featured_order` / `works_pick_order` 控制（数值越大越靠前），在后台对应字段维护。
+- **漫画内页**：按内页序号（sort_order）顺序连续阅读。
+
+---
+
+## 五、操作说明（持有人）
+
+1. 打开后台：https://zhanghangzhang545-source.github.io/qiuyuzhen-portfolio/#/admin/login
+2. 使用**管理员邮箱 + 密码**登录（密码由持有人掌握，**不写入本文件、不随交付包提供**）。
+3. 进入对应管理页（作品 / 漫画内页 / 证书 / 关于）修改，保存即生效，前台刷新即可见。
+4. 调整首页或作品库精选：在作品编辑页勾选 / 取消 `home_featured` 或 `works_pick` 并设置排序值。
+5. 发布媒体：上传后于媒体管理页点「发布」使其对公开；可下架或重新发布。
+
+---
+
+## 六、安全与隐私
+
+- 后台密码为持有人私有凭据，**不写入本仓库 / 不随交付包分发**。如遗忘，由持有人在 Supabase 后台重置。
+- 前台仅持有 Supabase 公开只读配置（URL + 发布密钥），不含任何服务端密钥 / 管理员密码。
+- 缺失配置时网站会明确报错（fail-closed），不会静默回退到演示数据。本地预览可用 `?mock=1` 走演示数据通道。
+
+---
+
+## 七、本地预览（可选）
+
+本目录即项目根（含 index.html 与 src/）。
 
 ```bash
-node serve.mjs          # 默认端口见终端输出
-# 打开 http://localhost:<port>/
+node serve.mjs          # 启动后打开终端输出的 http://localhost:<port>/
 ```
-- Windows：直接双击 `start.bat` 即可启动本地预览。
-- macOS / Linux：在终端运行 `bash start.sh`（或 `./start.sh`）。
+
+- Windows：双击 `start.bat`。
+- macOS / Linux：`bash start.sh`（或 `./start.sh`）。
+- 预览地址后加 `?mock=1` 可走演示数据。
