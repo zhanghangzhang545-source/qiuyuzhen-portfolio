@@ -13,6 +13,21 @@ export const OPTIM = {
   },
   "lqip": "data:image/webp;base64,UklGRk4BAABXRUJQVlA4IEIBAABwCQCdASooADUAPxl2slEspySnLVZtsZAjCUAYz4rtx4DfGTsp7KXmAcuQZ8QExDm7/9diJm66HtPgBYpMzPA6CsK0NsuOkg5T9vyvbBOnLTo6+AAA/t8liUYsqtaXDSQMeLMFdUnk0PKr7GO0SICkTQ6G6z1iAYKfkiLM1aWM+vDlZ3qpB6h1bNZ2f+dfoTxOedhBDiUjvALg+UyOAijk7fk1AahpA5T5iG3C/Zm1u3jy5zP85DV0RRr0oc1H7H0pJL9T7uS+JC9lfrLkNi5iaCCF3kvwY0swagXrwXDGra73Kpy/gUyOrtMDHEM2zTKI4mrqMSHsGrCwh0nHbBvGMWBSUdJF/9MrcQgTYlPrWKxOD6UI+i/bsAOM3QgxX+7RvHK7CiWmM534VN7MRNXWADAQAihbZcRz8C5iHpOVSgAA"
  },
+ "assets/cert/c01_rot.jpg": {
+  "w": 1400,
+  "h": 1048,
+  "webp": {
+   "480": "assets/optimized/cert/c01_rot__480w.webp",
+   "960": "assets/optimized/cert/c01_rot__960w.webp",
+   "1400": "assets/optimized/cert/c01_rot__1400w.webp"
+  },
+  "jpg": {
+   "480": "assets/optimized/cert/c01_rot__480w.jpg",
+   "960": "assets/optimized/cert/c01_rot__960w.jpg",
+   "1400": "assets/optimized/cert/c01_rot__1400w.jpg"
+  },
+  "lqip": "data:image/webp;base64,UklGRtAAAABXRUJQVlA4IMQAAABQBgCdASooAB4APvFmqFCppiQiuqgBMB4JZQDBkDmlWdhZ+hSUUDeqEJmc8w8kQ2jMQUnmXRx0vs1gYAD+3uxHPSSucMs4AIN20ne5iRBVyEcfon8H90uoQIi5WjngnawR7RL5NfUuY4rf8ox/++vSdi2TkManoPeLyvJS53xYOY9OXVzEhH/in/95ReqvbQF1RTT8KD8rMIHDY2qDHxZn+6gZT6aFxGxjxFFPWE0gpalS1md589OdYxf7DOlOA8gd17QA"
+ },
  "assets/cert/c02.jpg": {
   "w": 1400,
   "h": 989,
@@ -80,17 +95,6 @@ export const OPTIM = {
    "960": "assets/optimized/cert/c06__960w.jpg"
   },
   "lqip": "data:image/webp;base64,UklGRtABAABXRUJQVlA4IMQBAACQCgCdASooADkAPxl6sVQspyQjKrgM+ZAjCWMNxWWLnbD49dSo4iW29h8OKRw04gnFcNBlm3Nk25XtRCQ1t9Jcb24NjqD68ErOOCOGoYuFRCsjw6azX1a8H0sRYAAA/u1dQZ8vhJR5hGzAIUcz3d8iyw8G9+GKEUKxGgqdz5sOevDYHmhDzFP2eWo9ZBK42ckW4qXcld3XlACa/V6zUmZfCjQUxKB+CHN8eRYHLxn/RVYCSo0hf8KiCWAl0IGNoafcpPYD600U+pw+PkRgv8W+0pT/sCzeBWTsZaAEWVsB7VfrKKy3UjebqRBYndlirIqy80MFJqyQJwzqLhe4Pp4w0sssG3gs8ZxmQNVP+H9Tx4ukvp6ityzc0T+O+2Ky89F6syZItE8MCpiZEHNFaDbTNnsjVHa3EJCkIhxtCfEioM6diAuzmV3SHunWKv+7TAxu9dv1vpscYVY4Da5/bFuxZGgYHknxVXOnwXi4MyX+v0C9HbYBcilf0RAIpRYRQnAo2Ix0k8agmOaiQqEsnZi3sqZ7yXQetoqlReu4l2n7/QK7dDQaBP3a9qFvVz3kq8MOzCmTbECYl5AjRlwFUvudHgAAAA=="
- },
- "assets/cert/c07.jpg": {
-  "w": 788,
-  "h": 1400,
-  "webp": {
-   "480": "assets/optimized/cert/c07__480w.webp"
-  },
-  "jpg": {
-   "480": "assets/optimized/cert/c07__480w.jpg"
-  },
-  "lqip": "data:image/webp;base64,UklGRj4BAABXRUJQVlA4IDIBAABwCgCdASooAEcAPxFwslCsJiSisRQO2YAiCWUAzyyPxh2o7W+jyr+QMle1kDUG0iaopo9YbAa3B9zeWYhw2mgrjlCm12wgbjabvCZ0qfVDGzqts14fblDAMbOKAAD+b0MljPKI4OeSTE6qOmYmMoQl4S+obMex32/8Mc/nRSaLgDHWXGCdTTgu7g+q/AxfoGWjrPy8SzNLgedAw4VggWBonqWrlykiakU6HlO8V24YZa8S6gpjUrbMkPQHp4s4tS2IxmKwqQ9VeaIPkDfxoqdQ56hetEaSHjPNee9O6nGNfwlbG+9ydZjjv2B51NH32Vckdu+QBwe5KOIwifFk7bCNSEYFiUIL1l7HNvMo1GoY5+LxoagNqbelMOopR6nK6kKhOg8REFSRkyRD3RhZR/DPaAA="
  },
  "assets/comic/course2020/cover.jpg": {
   "w": 1600,

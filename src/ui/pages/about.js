@@ -5,46 +5,15 @@
 //  · 手机：单列，左编号栏隐藏
 // ============================================================
 import { h } from '../../core/dom.js';
-import { repo } from '../../data/services.js';
+import { repo, aboutRepo } from '../../data/services.js';
 import { imgEl } from '../components/media.js';
-
-const NEUTRAL_BIO = '以插画与漫画为主要创作方向，关注角色、叙事与氛围表达。';
 
 // 响应式 sizes（按真实展示宽度；P0 性能专项加入，视觉/版式不变）
 const SZ = {
-  certMain: '(max-width: 600px) 92vw, (max-width: 1024px) 46vw, 560px',
-  certAux: '(max-width: 600px) 30vw, (max-width: 1024px) 31vw, 330px',
+  certPortrait: '(max-width: 600px) 46vw, (max-width: 1024px) 31vw, 330px',
+  certLandscape: '(max-width: 600px) 92vw, (max-width: 1024px) 46vw, 560px',
   lightbox: '(max-width: 600px) 92vw, 800px',
 };
-
-const EDU = [
-  { yr: '2017.9 – 2021.7', h: '中国传媒大学南广学院 · 漫画与插画｜本科', p: '本科阶段主修漫画叙事与插画创作，毕业设计为 42 页漫画。' },
-  { yr: '2024.4 – 2026.3', h: '日本代代木动画学院（代々木アニメーション学院）· 漫画（进修）｜专门学校', p: '漫画专业进修；毕业制作（2026 年 2 月）共 27 页。' },
-];
-
-const EXP = [
-  { yr: '2026', h: '代代木动画学院 毕业制作', p: '27 页漫画毕业设计（日本 · 代代木动画学院）。' },
-  { yr: '2024', h: 'CP30 同人志《舞机》', p: '13 页同人志创作（Fan Work，不拥有原作 IP）。' },
-  { yr: '2021', h: '大学毕业设计', p: '42 页漫画（中国传媒大学南广学院）。' },
-  { yr: '2020', h: '24小时国际漫画马拉松', p: '8 页参赛漫画，获三等奖。' },
-  { yr: '2020', h: '大学漫画课程作业', p: '正文 20 页，另含封面与封底。' },
-  { yr: '2018.7 – 2018.9', h: '上海观池文化传播有限公司｜漫画助理', p: '' },
-];
-
-const SKILLS = ['CLIP STUDIO PAINT（CSP）', 'SAI', 'Photoshop', '日语 JLPT N2'];
-const DIRECTIONS = ['插画创作', '漫画创作', '油画'];
-
-// 05 重点荣誉（职业相关，依据真实证书；仅列重点）
-const HONORS = [
-  { y: '2025', t: '米画师平台 商业插画师认证' },
-  { y: '2024', t: 'JCLI 优秀赏' },
-  { y: '2020', t: '第四届吉林动画学院 24小时国际漫画马拉松 三等奖' },
-  { y: '2018', t: '学院作品永久收藏' },
-  { y: '2014', t: '全国少年儿童绘画绘本创作大赛 中学绘本组 三等奖' },
-  { y: '2013', t: '四川省中小学生优秀艺术人才大赛（资阳赛区）美术专业初中组 一等奖' },
-];
-
-const CONTACT = [{ k: '邮箱', v: '2219528116@qq.com' }];
 
 const RAIL = [
   { num: '01', title: 'INTRO', id: 'sec-intro' },
@@ -84,6 +53,17 @@ function openLightbox(src, alt) {
 }
 
 export async function aboutView() {
+  // C1 真实读取 About：从 aboutRepo 取数据（Mock / Supabase 自动切换），
+  // DOM / CSS 结构完全不变，仅数据源由硬编码改为仓储读取。
+  const A = await aboutRepo.read();
+  const EDU = A.education;
+  const EXP = A.experience;
+  const SKILLS = A.skills;
+  const DIRECTIONS = A.directions;
+  const HONORS = A.honors;
+  const CONTACT = A.contacts;
+  const NEUTRAL_BIO = A.bio || '以插画与漫画为主要创作方向，关注角色、叙事与氛围表达。';
+
   const all = await repo.filter({ publicOnly: true });
   // 证书展示逻辑：仅展示「关于」荣誉区，且受 public 控制（public:false 的证书不在 About 出现）。
   // 证书不进入 Works 是由类型（栏目规则）决定，与其 public 无关。
@@ -92,45 +72,41 @@ export async function aboutView() {
   const illustrations = all.filter((w) => w.type === 'illustration');
   const oils = all.filter((w) => w.type === 'oil');
 
-  // 证书：1 张主证书（最大、最具职业价值）+ 3 张辅助证书（有主次构图，不散落于大空白）；其余以文字记录
-  const MAIN_CERT = 'cert-cert01'; // 一等奖，最具代表性
-  const AUX_CERTS = ['cert-cert03', 'cert-cert06', 'cert-cert07'];
-  const mainCert = certs.find((c) => c.id === MAIN_CERT) || null;
-  const auxCerts = AUX_CERTS.map((id) => certs.find((c) => c.id === id)).filter(Boolean);
-  const restCerts = certs.filter((c) => c.id !== MAIN_CERT && !AUX_CERTS.includes(c.id));
-  const certLayout = (mainCert || auxCerts.length)
+  // 证书展示（客户反馈 B：奖状尽量全部附上，按版式展示）：
+  //   全部保持原始比例、不裁切、不拉伸；点击可放大查看。仅展示真实收到的证书，不虚构缺失素材。
+  //   c01 证书原图横拍，已生成正确朝向衍生图（c01_rot.jpg），正文正常阅读、完整不裁切。
+  // —— 客户明确：桌面 / 手机第一眼看到的「第一张图片」必须是横向 c01_rot，不得仅靠分组自然排序。
+  //    因此显式把 c01_rot 抽出排在第一位，其余证书按真实比例自然排列（竖并排 / 横宽展）。
+  const CERT_FIRST_ID = 'cert-cert01'; // 对应 assets.gen.js cert01 → seed.js 拼接为 cert-cert01
+  const firstCert = certs.find((c) => c.id === CERT_FIRST_ID) || null;
+  const restCerts = certs.filter((c) => c.id !== CERT_FIRST_ID);
+
+  const certItem = (c, sizes) => h('button', { class: 'cv-cert', type: 'button', on: { click: () => openLightbox(c.cover, c.title) } }, [
+    h('div', { class: 'cv-cert__media' }, imgEl(c.cover, null, c.title, { w: c.coverW, h: c.coverH, sizes })),
+    h('div', { class: 'cv-cert__title' }, c.title),
+  ]);
+
+  // 显式首位：c01_rot 永远第一；其余证书按真实比例自然排列（横宽展 / 竖并排）。
+  const certLayout = certs.length
     ? h('div', { class: 'cv-cert-layout' }, [
-        mainCert ? h('div', { class: 'cv-cert-main' }, [
-          h('button', { class: 'cv-cert', type: 'button', on: { click: () => openLightbox(mainCert.cover, mainCert.title) } }, [
-            h('div', { class: 'cv-cert__media' }, imgEl(mainCert.cover, null, mainCert.title, { w: mainCert.coverW, h: mainCert.coverH, sizes: SZ.certMain })),
-            h('div', { class: 'cv-cert__title' }, mainCert.title),
-          ]),
-        ]) : null,
-        auxCerts.length ? h('div', { class: 'cv-cert-aux' }, auxCerts.map((c) =>
-          h('button', { class: 'cv-cert', type: 'button', on: { click: () => openLightbox(c.cover, c.title) } }, [
-            h('div', { class: 'cv-cert__media' }, imgEl(c.cover, null, c.title, { w: c.coverW, h: c.coverH, sizes: SZ.certAux })),
-            h('div', { class: 'cv-cert__title' }, c.title),
-          ]))) : null,
-      ])
-    : null;
-  const restCertText = restCerts.length
-    ? h('div', { class: 'cv-cert-text' }, restCerts.map((c) =>
-        h('div', { class: 'cv-cert-text__row' }, [h('span', { class: 'cv-cert-text__t' }, c.title)])))
+        firstCert ? h('div', { class: 'cv-cert-row cv-cert-row--first' }, [certItem(firstCert, SZ.certLandscape)]) : null,
+        restCerts.length ? h('div', { class: 'cv-cert-row cv-cert-row--rest' }, restCerts.map((c) => certItem(c, (c.coverW || 0) < (c.coverH || 0) ? SZ.certPortrait : SZ.certLandscape))) : null,
+      ].filter(Boolean))
     : null;
 
   return h('div', { class: 'container about-wrap' }, [
     h('section', { class: 'about' }, [
       h('div', { class: 'about__head' }, [
         h('div', { class: 'eyebrow' }, '个人介绍 · ABOUT'),
-        h('h1', { class: 'about__name' }, '邱钰真'),
-        h('div', { class: 'about__role' }, 'QIU YUZHEN · 插画 / 漫画 / 油画'),
+        h('h1', { class: 'about__name' }, A.fullName || '邱钰真'),
+        h('div', { class: 'about__role' }, `${A.pinyin || 'QIU YUZHEN'} · 插画 / 漫画 / 油画`),
         h('p', { class: 'about__lead' }, `${NEUTRAL_BIO} 创作涵盖插画、漫画与油画。`),
       ]),
       h('div', { class: 'about__stats' }, [
         h('div', {}, [h('div', { class: 'about__stat-num' }, String(EDU.length)), h('div', { class: 'about__stat-label' }, '所院校学习经历')]),
         h('div', {}, [h('div', { class: 'about__stat-num' }, String(comics.length)), h('div', { class: 'about__stat-label' }, '部漫画作品')]),
         h('div', {}, [h('div', { class: 'about__stat-num' }, String(illustrations.length + oils.length)), h('div', { class: 'about__stat-label' }, '件插画与油画')]),
-        h('div', {}, [h('div', { class: 'about__stat-num' }, String(certs.length)), h('div', { class: 'about__stat-label' }, '份精选证书')]),
+        h('div', {}, [h('div', { class: 'about__stat-num' }, String(certs.length)), h('div', { class: 'about__stat-label' }, '份荣誉证书')]),
       ]),
       h('div', { class: 'about__body' }, [
         h('aside', { class: 'about__rail' }, RAIL.map((r) => railLink(r.num, r.title, r.id))),
@@ -151,12 +127,11 @@ export async function aboutView() {
             h('div', {}, HONORS.map((a) => h('div', { class: 'cv-honor' }, [
               h('span', { class: 'cv-honor__yr' }, a.y), h('span', { class: 'cv-honor__t' }, a.t),
             ]))),
-            h('p', { class: 'secondary', style: { margin: 'var(--s4) 0 var(--s5)' } }, '2004年至2011年，连续8届获得当地“青少年艺术表演大赛”美术项目金奖。'),
-            h('p', { class: 'secondary', style: { marginBottom: 'var(--s3)' } }, '以下为部分已附证书（图片完整显示，不裁切；点击可放大查看）：'),
-            certLayout,
-            restCertText
-              ? h('p', { class: 'secondary cv-cert-text__note' }, ['其余荣誉（文字记录）：', restCerts.map((c, i) => h('span', {}, [c.title, i < restCerts.length - 1 ? '；' : '。'])).flat()])
+            A.honorParagraph && A.honorParagraph.length
+              ? h('p', { class: 'secondary', style: { margin: 'var(--s4) 0 var(--s5)' } }, A.honorParagraph)
               : null,
+            h('p', { class: 'secondary', style: { marginBottom: 'var(--s3)' } }, '以下为已附证书（全部展示，图片完整显示，不裁切；点击可放大查看）：'),
+            certLayout,
           ])),
         ]),
       ]),

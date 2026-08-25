@@ -16,6 +16,31 @@ const ILLU_FEATURED = new Set(['i01', 'i12', 'i13']);
 const OIL_FEATURED = new Set(['oil1']);
 const COMIC_FEATURED = new Set(['comic-grad2021', 'comic-yoyogi2026']);
 
+// A4 数据模型预留字段：displaySize（枚举 standard / large-portrait / wide-feature）
+//   standard        —— 普通作品：Archive 小尺寸（Works 页多列自然流）
+//   large-portrait  —— 重点竖版：允许两张并列大图
+//   wide-feature    —— 重点横版：独占整块宽区域
+// 管理员（Phase3 后台）只能在该枚举内调整视觉权重，不可自由输入任意 CSS 尺寸。
+// 当前取值沿用「已确认精选」：i12/i10 = 首页专题A已确认双联竖图；i01 = 已确认横幅。
+// 其余精选（i13/i14/i17）是否放大 → 等客户确认后改字段，见 _other_works_checklist.md。
+const DISPLAY_SIZE = { i01: 'wide-feature', i12: 'large-portrait', i10: 'large-portrait' };
+
+// C1 FINAL 唯一阻断修复：给 Mock 数据补齐「Works Pick」维度（?mock=1 紧急回滚模式下的
+// 「全部作品」默认页精选入口）。精确值与真实 B2 / Supabase 冻结一致，且独立于此处的
+// home_featured（Home Featured）维度——严禁用 featured 推算 worksPick。
+// 冻结语义：works_pick_order 越大越靠前（= 100 - index*2）。
+//   comic-yoyogi2026=100 / i01=98 / i12=96 / i13=94 / oil1=92；其余所有作品 = false,0。
+// 注意：comic-grad2021 是 Home Featured=true 但 Works Pick=false，两维度必须继续独立。
+const WORKS_PICK = {
+  'comic-yoyogi2026': 100,
+  i01: 98,
+  i12: 96,
+  i13: 94,
+  oil1: 92,
+};
+// 统一读取：命中 WORKS_PICK 取其 order；否则 false/0。所有作品类型共用，确保维度独立。
+const pickOf = (id) => (id in WORKS_PICK ? { worksPick: true, worksPickOrder: WORKS_PICK[id] } : { worksPick: false, worksPickOrder: 0 });
+
 function wrap(t) {
   return t.startsWith('《') || t.startsWith('[') ? t : `《${t}》`;
 }
@@ -40,6 +65,9 @@ export function buildSeed() {
       sort: featured ? 200 - [...ILLU_FEATURED].indexOf(a.id) * 2 : 60 + n,
       public: true,
       featured,
+      homeFeaturedOrder: featured ? 100 - [...ILLU_FEATURED].indexOf(a.id) * 2 : 0,
+      displaySize: DISPLAY_SIZE[a.id] || 'standard',
+      ...pickOf(a.id),
       cover: a.file,
       coverW: a.w,
       coverH: a.h,
@@ -62,6 +90,9 @@ export function buildSeed() {
       sort: featured ? 190 : 55 - i,
       public: true,
       featured,
+      homeFeaturedOrder: featured ? 94 : 0,
+      displaySize: 'standard',
+      ...pickOf(o.id),
       cover: o.file,
       coverW: o.w,
       coverH: o.h,
@@ -124,6 +155,9 @@ export function buildSeed() {
       sort: c.sort,
       public: true,
       featured: COMIC_FEATURED.has(c.id),
+      homeFeaturedOrder: COMIC_FEATURED.has(c.id) ? (c.id === 'comic-grad2021' ? 92 : c.id === 'comic-yoyogi2026' ? 90 : 0) : 0,
+      displaySize: 'standard',
+      ...pickOf(c.id),
       cover: src.cover,
       coverW: src.coverW,
       coverH: src.coverH,
@@ -131,7 +165,7 @@ export function buildSeed() {
     });
   });
 
-  // —— 证书（7 张真实荣誉；仅用于「关于」荣誉展示，不进入公开作品库） ——
+  // —— 证书（真实荣誉；仅用于「关于」荣誉展示，不进入公开作品库） ——
   ASSET.certs.forEach((c, i) => {
     push({
       type: 'certificate',
@@ -147,6 +181,9 @@ export function buildSeed() {
       // public 控制其在「关于」荣誉区是否展示：true=展示，false=隐藏（不会因此被计入网站未公开）。
       public: true,
       featured: false,
+      homeFeaturedOrder: 0,
+      worksPick: false,
+      worksPickOrder: 0,
       cover: c.file,
       coverW: c.w,
       coverH: c.h,

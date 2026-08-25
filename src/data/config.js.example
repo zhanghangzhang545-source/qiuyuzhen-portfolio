@@ -1,0 +1,18 @@
+// ============================================================
+// config.js.example — 前端公开配置模板（Phase 3-C）
+// ------------------------------------------------------------
+// 复制本文件为 src/data/config.js 并在其中填入真实值。
+// ❌ config.js 已被 .gitignore 忽略（见下方说明）；它只含两个「公开」变量，
+//    不含任何 secret / service_role / DB 密码 / JWT。
+// ❌ 禁止把以下任一写入源码/浏览器/Git/构建产物：
+//    SUPABASE_DB_URL / SUPABASE_SERVICE_ROLE / SUPABASE_ADMIN_EMAIL /
+//    SUPABASE_ADMIN_PASSWORD / 任何 JWT secret / 任何 DB 密码。
+//
+// 两个变量的获取位置（Supabase 项目后台）：
+//   SUPABASE_URL              → Settings → API → Project URL
+//   SUPABASE_PUBLISHABLE_KEY  → Settings → API → Project API keys → anon public
+//     （名为 anon，实为「publishable」，可安全暴露在前端；RLS 才是真正的防线）
+// ============================================================
+
+export const SUPABASE_URL = 'https://YOUR-PROJECT-REF.supabase.co';
+export const SUPABASE_PUBLISHABLE_KEY = 'your-anon-public-key';

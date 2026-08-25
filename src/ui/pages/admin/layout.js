@@ -13,6 +13,7 @@ export function adminLayout(active, content) {
     nav.appendChild(a);
   };
   add('#/admin', '仪表盘', 'dashboard');
+  add('#/admin/about', '关于页数据', 'about');
   add('#/admin/work/new', '新增作品', 'new');
   add('#/', '返回前台', 'site');
   add('#/admin/login', '退出登录', 'logout', () => { auth.logout(); location.hash = '#/admin/login'; });

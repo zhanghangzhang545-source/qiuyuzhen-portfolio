@@ -753,9 +753,9 @@ export const ASSET = {
     {
       "id": "cert01",
       "title": "2013 四川省中小学生优秀艺术人才大赛（资阳赛区）美术专业初中组 一等奖",
-      "file": "assets/cert/c01.jpg",
-      "w": 1048,
-      "h": 1400
+      "file": "assets/cert/c01_rot.jpg",
+      "w": 1400,
+      "h": 1048
     },
     {
       "id": "cert02",
@@ -780,7 +780,7 @@ export const ASSET = {
     },
     {
       "id": "cert05",
-      "title": "2018 一颗工作室 聘任证书",
+      "title": "2017–2018 中国传媒大学南广学院 团学组织-数字传媒中心 聘任",
       "file": "assets/cert/c05.jpg",
       "w": 1400,
       "h": 1020
@@ -792,12 +792,5 @@ export const ASSET = {
       "w": 990,
       "h": 1400
     },
-    {
-      "id": "cert07",
-      "title": "2018–2019 新江苏动画短片 优秀奖",
-      "file": "assets/cert/c07.jpg",
-      "w": 788,
-      "h": 1400
-    }
   ]
 };

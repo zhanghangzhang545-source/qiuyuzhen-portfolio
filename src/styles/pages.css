@@ -31,18 +31,26 @@
   gap: var(--s5); flex-wrap: wrap;
   padding: var(--pad-x); padding-bottom: clamp(28px, 6vh, 64px);
 }
-.hero__copy { max-width: 30ch; }
+.hero__copy { max-width: 36ch; }
 .hero__kicker {
   display: flex; align-items: center; gap: var(--s3); margin-bottom: var(--s4);
   font-size: 12px; letter-spacing: .22em; text-transform: uppercase; color: var(--ink-on-dark-2);
 }
-.hero__name {
-  font-family: var(--font-display); font-weight: 500; line-height: .88; letter-spacing: .01em;
-  font-size: clamp(48px, 9vw, 132px);
+/* P0-1 / Final Gate：姓名层级反转 —— .hero__cn（邱钰真）为第一视觉，单行不拆；
+   .hero__name（QIU YUZHEN）降为小一级第二层级 */
+.hero__cn {
+  font-family: var(--font-display); font-weight: 500; line-height: 1.02; letter-spacing: .02em;
+  font-size: clamp(46px, 8.4vw, 124px); margin: 0; color: var(--ink-on-dark);
+  white-space: nowrap;       /* 中文姓名必须完整单行，不拆成两行 */
 }
-.hero__name span { display: block; }
-.hero__cn { font-family: var(--font-display); font-size: clamp(22px, 2.6vw, 34px); font-weight: 500; margin-top: var(--s3); color: var(--ink-on-dark); }
-.hero__lead { font-family: var(--font-sans); font-size: clamp(14px, 1.3vw, 16px); line-height: 1.7; color: var(--ink-on-dark-2); margin-top: var(--s4); max-width: 34ch; }
+.hero__name {
+  /* 客户反馈：大写英文更舒展透气（字距放大），与中文姓名、简介组成一个紧凑信息组 */
+  font-family: var(--font-display); font-weight: 500; line-height: 1.12; letter-spacing: .26em;
+  font-size: clamp(18px, 2vw, 30px); margin-top: var(--s2); color: var(--ink-on-dark-2);
+}
+.hero__name span { display: inline-block; }
+.hero__name span:first-child { margin-right: .42em; }
+.hero__lead { font-family: var(--font-sans); font-size: clamp(14px, 1.3vw, 16px); line-height: 1.7; color: var(--ink-on-dark-2); margin-top: var(--s3); max-width: 34ch; }
 .hero__scroll {
   display: inline-flex; align-items: center; gap: 10px; align-self: flex-end;
   font-size: 13px; letter-spacing: .18em; text-transform: uppercase; color: var(--ink-on-dark);
@@ -99,6 +107,10 @@
 .composite__oil { display: block; }
 .composite__oil .work-card__cap { margin-top: var(--s3); }
 
+/* A2 首页油画专题（OIL PAINTING，仅两幅真实油画并排） */
+.ow-oil { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s6); align-items: start; }
+.ow-oil__cell .work-card__cap { margin-top: var(--s3); }
+
 /* 段落 4b：2021 大学毕业设计 — 横向漫画预览（封面 + 内页缩略 + 标题） */
 .feat-comicprev { display: grid; grid-template-columns: 110px 1fr auto; gap: var(--s5); align-items: center; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); padding: var(--s5) 0; }
 .feat-comicprev__cover { width: 110px; }
@@ -135,6 +147,14 @@
 /* 关于预告（暖白，纯文字 + 数据，紧凑） */
 .intro-teaser { display: grid; grid-template-columns: 1.2fr 1fr; gap: var(--s7); align-items: center; }
 .intro-teaser h2 { font-family: var(--font-display); font-size: clamp(30px, 3.6vw, 46px); font-weight: 500; margin: var(--s3) 0 var(--s4); }
+/* A1 桌面反馈：姓名行（中文宋体字标 + 大写拼音小一级同排，拼音不抢主名层级） */
+.intro-teaser__name-row { display: flex; align-items: baseline; gap: var(--s4); flex-wrap: wrap; margin: var(--s3) 0 var(--s4); }
+.intro-teaser__name-row h2 { margin: 0; }
+.intro-teaser__pinyin { font-family: var(--font-display); font-size: clamp(15px, 1.5vw, 20px); letter-spacing: .14em; color: var(--ink-3); font-weight: 400; }
+/* A1 桌面反馈：人物介绍正文桌面端适当提高字号与行高（仅本区，不全站放大） */
+@media (min-width: 721px) {
+  .intro-teaser .lead { font-size: clamp(20px, 1.7vw, 23px); line-height: 1.85; }
+}
 .intro-teaser__stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--s5); border-left: 1px solid var(--line); padding-left: var(--s7); }
 .intro-teaser__num { font-size: clamp(40px, 5vw, 72px); line-height: 1; color: var(--ink); }
 .intro-teaser__label { font-size: 13px; color: var(--ink-3); margin-top: 8px; line-height: 1.5; }
@@ -202,7 +222,20 @@
 .illu-feat__cell .feat-img { width: 100%; height: auto; display: block; }
 .illu-feat__cell .work-card__cap { margin-top: var(--s3); }
 .illu-feat__pair { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s5); align-items: start; }
-/* 其余 12 件复用 .works-masonry（components.css）：桌面3列 / 平板2列 / 手机1列，自然比例无纵向空洞 */
+/* 其余复用 .works-masonry（components.css）：桌面3列 / 平板2列 / 手机1列，自然比例无纵向空洞 */
+
+/* —— 「全部作品」默认页精选入口（客户反馈 C；桌面 + 手机统一，分类页仍展示完整作品） —— */
+/* 默认无筛选视图（.has-picks）：显示精选入口、隐藏完整章节；进入具体分类页或筛选后回完整结构 */
+.works-picks { display: none; }
+.works-page.has-picks .works-groups { display: none; }
+.works-page.has-picks .works-picks { display: block; }
+.picks__cat { padding: var(--s5) 0; border-bottom: 1px solid var(--line); }
+.picks__cat:last-child { border-bottom: 0; }
+.picks__head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--s4); margin-bottom: var(--s4); }
+.picks__title { font-size: 24px; }
+/* 桌面：精选列表用双列网格（漫画单列行 + 插画/油画卡片自适应）；手机单列由媒体查询覆盖 */
+.picks__list { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s5); align-items: start; }
+.picks__list > .comic-row { grid-column: 1 / -1; }
 
 /* Works 页：作品标题字号提升，普通笔记本屏幕无需放大即可快速阅读（作用域限定本页，不影响首页冻结版式） */
 .works-page .work-card__title { font-size: 24px; }
@@ -234,17 +267,17 @@
 
 /* 证书：1 张主证书（大）+ 3 张辅助证书（小），有明确主次，不散落于大空白 */
 .cv-cert-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--s6); max-width: 900px; }
-.cv-cert-layout { display: grid; grid-template-columns: 1.15fr 1fr; gap: var(--s6); align-items: start; max-width: 1040px; }
-.cv-cert-main { min-width: 0; }
-.cv-cert-aux { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--s4); align-items: start; }
+/* 证书全部展示（客户反馈 B）：竖版并排一组、横版较宽一组，原比例、不裁切、点击放大 */
+.cv-cert-layout { display: flex; flex-direction: column; gap: var(--s6); max-width: 1040px; }
+.cv-cert-row { display: grid; gap: var(--s4); align-items: start; }
+/* 首张证书（c01_rot 横向）独占整行作为视觉焦点；其余证书 2 列自然排布（横/竖均按真实比例） */
+.cv-cert-row--first { grid-template-columns: 1fr; }
+.cv-cert-row--rest { grid-template-columns: repeat(2, 1fr); gap: var(--s5); }
 .cv-cert { text-align: left; background: transparent; border: 0; padding: 0; cursor: pointer; }
 .cv-cert__media { overflow: hidden; background: var(--paper-2); outline: 1px solid transparent; transition: outline-color .2s ease; }
 .cv-cert:hover .cv-cert__media { outline-color: var(--ink-2); }
 .cv-cert__media img, .cv-cert__media svg { width: 100%; height: auto; display: block; }
 .cv-cert__title { font-size: 12px; color: var(--ink-2); margin-top: 6px; line-height: 1.4; }
-.cv-cert-main .cv-cert__title { font-size: 13px; }
-.cv-cert-text__note { margin-top: var(--s4); line-height: 1.75; }
-.cv-cert-text__t { color: var(--ink); }
 
 /* —— 作品详情（完整展示原图，禁止裁切） —— */
 .detail { padding-block: var(--s6) var(--s8); }
@@ -322,7 +355,7 @@
 .cv-honor { display: grid; grid-template-columns: 132px 1fr; gap: var(--s5); padding: var(--s3) 0; border-top: 1px solid var(--line); }
 .cv-honor:first-child { border-top: 0; }
 
-/* 旧 .cv-cert-strip 体系已废弃：证书统一使用 .cv-cert-layout / .cv-cert-main / .cv-cert-aux 一套规则（见上文） */
+/* 旧 .cv-cert-strip / 主辅证书体系已废弃：证书全部展示，统一使用 .cv-cert-layout / .cv-cert-row 一套规则（见上文） */
 
 /* 灯箱（点击证书放大） */
 .lightbox { position: relative; background: var(--paper); border: 1px solid var(--line); max-width: min(760px, 92vw); max-height: 88vh; overflow: auto; padding: var(--s2); }

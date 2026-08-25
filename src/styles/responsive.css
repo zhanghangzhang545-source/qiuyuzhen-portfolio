@@ -54,9 +54,11 @@
   .hero__inner { position: static; padding: var(--s3) var(--pad-x) var(--s5); color: var(--ink); }
   .hero__copy { max-width: none; width: 100%; }
   .hero__kicker { display: none; }
-  .hero__name { font-size: clamp(44px, 14vw, 84px); color: var(--ink); }
-  .hero__cn { font-size: 24px; margin-top: var(--s2); color: var(--ink); }
-  .hero__lead { font-size: 15px; margin-top: var(--s2); color: var(--ink-2); }
+  /* 手机封面：邱钰真（第一视觉）大、QIU YUZHEN（第二层级）小（P0-1 同层级反转）；英文更透气、与中文/简介成组 */
+  .hero__cn { font-size: clamp(40px, 14vw, 72px); margin-top: var(--s2); color: var(--ink); letter-spacing: .02em; white-space: nowrap; }
+  .hero__name { font-size: clamp(15px, 4.4vw, 23px); color: var(--ink-2); margin-top: var(--s2); letter-spacing: .22em; line-height: 1.14; font-weight: 500; }
+  .hero__name span:first-child { margin-right: .5em; }
+  .hero__lead { font-size: 15px; margin-top: var(--s3); color: var(--ink-2); }
   .hero__scroll { display: none; }
   /* 手机端首页导航也用纸色实底，避免浅色字压在亮图上 */
   .site-nav--hero { background: color-mix(in srgb, var(--paper) 94%, transparent); backdrop-filter: saturate(120%) blur(6px); border-bottom-color: var(--line); color: var(--ink); }
@@ -122,13 +124,16 @@
 
   /* 作品库：手机单列；统一章节标题纵向堆叠 */
   .works-groups { gap: var(--s6); }
+  /* 手机「全部作品」默认视图 → 精选入口单列（桌面双列由 base 规则，此处覆盖为单列） */
+  .picks__list { grid-template-columns: 1fr; }
   .works-chapter__head { flex-direction: column; align-items: flex-start; gap: var(--s3); }
   .works-chapter__meta { flex-direction: column; align-items: flex-start; gap: var(--s2); }
   .works-chapter__title { font-size: 30px; }
   .illu-feat { gap: var(--s5); }
   .illu-feat__pair { grid-template-columns: 1fr; gap: var(--s5); }
-  .cv-cert-layout { grid-template-columns: 1fr; gap: var(--s5); }
-  .cv-cert-aux { grid-template-columns: repeat(3, 1fr); }
+  .cv-cert-layout { gap: var(--s5); }
+  .cv-cert-row--first { grid-template-columns: 1fr; }
+  .cv-cert-row--rest { grid-template-columns: 1fr; }
   .oil-gallery { grid-template-columns: 1fr; gap: var(--s5); }
   .comic-row { grid-template-columns: 104px 1fr; gap: var(--s4); padding: var(--s5) 0; }
   .comic-row__page { display: none; }
@@ -151,6 +156,8 @@
   /* 综合创作：手机单列（献上战舞全宽，两幅油画下方堆叠，不再挤压成双列） */
   .composite { grid-template-columns: 1fr; gap: var(--s5); }
   .composite__oils { gap: var(--s5); }
+  /* A2 OTHER WORKS 双候选：手机单列全宽（不硬复制桌面双列） */
+  .ow-oil, .ow-mixed { grid-template-columns: 1fr; gap: var(--s5); }
 
   /* 漫画阅读：纵向连续翻页，接近全宽，页间距统一；无分页导航/进度，不覆盖原作 */
   .reader { max-width: 100%; }

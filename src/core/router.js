@@ -43,6 +43,22 @@ export class Router {
       app.appendChild(resolved);
       window.scrollTo(0, 0);
       if (this.opts.after) this.opts.after(pattern, params, query);
+    }).catch((err) => {
+      // 统一显式错误态：视图渲染/reject 不得导致白屏。
+      // 正式模式（Supabase）下，真实读取失败必须显式呈现，禁止静默空白。
+      console.error('[router] 视图渲染失败：', err);
+      const msg = (err && err.message) ? err.message : String(err);
+      app.innerHTML = '';
+      app.appendChild(raw(
+        '<div class="container section">' +
+        '<div class="router-error">' +
+        '<h1 class="display">页面加载出错</h1>' +
+        '<p class="secondary">该页面在加载数据时出现问题。请检查网络后重试；若持续出现，请联系管理员。</p>' +
+        '<p class="router-error__detail"></p>' +
+        '</div></div>'
+      ));
+      const detail = app.querySelector('.router-error__detail');
+      if (detail) detail.textContent = msg;
     });
   }
 }

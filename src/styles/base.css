@@ -124,3 +124,16 @@ label { font-size: 13px; color: var(--ink-3); letter-spacing: .03em; }
 
 /* —— 通用上移动画（仍供 toast 等组件使用；不再保留会把元素默认隐藏的 .reveal 类） —— */
 @keyframes fade-up { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: none; } }
+
+/* —— 路由错误边界（统一显式错误态，禁止白屏） —— */
+.router-error {
+  max-width: 680px; margin: 0 auto; padding: 48px 0;
+  text-align: center;
+}
+.router-error h1 { font-size: clamp(28px, 5vw, 44px); margin-bottom: 16px; }
+.router-error .secondary { color: var(--ink-3); margin-bottom: 14px; }
+.router-error__detail {
+  font-family: var(--font-mono); font-size: 13px; color: var(--ink-3);
+  background: var(--paper-2); border: 1px solid var(--line); border-radius: var(--r-md);
+  padding: 10px 12px; word-break: break-word; text-align: left;
+}
