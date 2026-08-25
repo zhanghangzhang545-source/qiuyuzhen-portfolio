@@ -266,15 +266,16 @@ export async function worksView(params, query) {
     }
   }
 
-  // 类型切换：写入路由（入历史栈，支持返回/前进），整页重渲，URL 与标题同步更新。
-  // 排序/阶段/年份/关键词：原地 replaceState（不新增历史），仅更新 URL 与结果。
+  // 类型切换：写 hash（入历史栈，支持返回/前进），router 整页重渲。
+  // 排序/阶段/年份/关键词：pushState 入历史栈（保留 granularity，Back/Forward 可逐步撤销筛选），
+  // 并就地 renderResults 仅更新结果区（避免整页重渲导致搜索框失焦）；router 已监听 popstate 重渲。
   const filter = renderFilterBar({ ...query, type }, years, stages, (newQ) => {
     const base = newQ.type ? `#/works/${newQ.type}` : '#/works';
     const qs = buildQuery({ sort: newQ.sort, stage: newQ.stage, year: newQ.year, q: newQ.q });
     if (newQ.type !== type) {
       location.hash = base + qs;
     } else {
-      history.replaceState(null, '', base + qs);
+      history.pushState(null, '', base + qs);
       renderResults(newQ);
     }
   });

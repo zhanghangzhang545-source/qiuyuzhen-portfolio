@@ -9,6 +9,9 @@ export class Router {
     this.routes = routes;
     this.opts = opts;
     window.addEventListener('hashchange', () => this.resolve());
+    // 历史前进/后退：pushState 创建的筛选态（关键词/阶段/年份/排序）在 Back/Forward
+    // 时通过 popstate 触发重渲，恢复对应视图；router 仅读取当前 hash，无副作用、无回环。
+    window.addEventListener('popstate', () => this.resolve());
   }
 
   start() {
