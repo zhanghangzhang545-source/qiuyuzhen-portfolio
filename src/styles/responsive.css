@@ -127,6 +127,8 @@
   .works-groups { gap: var(--s6); }
   /* 手机「全部作品」默认视图 → 精选入口单列（桌面双列由 base 规则，此处覆盖为单列） */
   .picks__list { grid-template-columns: 1fr; }
+  /* 精选插画（columns 自然流）手机端同样落为单列，按作品顺序展示、无空洞 */
+  .picks__list--illus { column-count: 1; }
   .works-chapter__head { flex-direction: column; align-items: flex-start; gap: var(--s3); }
   .works-chapter__meta { flex-direction: column; align-items: flex-start; gap: var(--s2); }
   .works-chapter__title { font-size: 30px; }

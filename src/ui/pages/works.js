@@ -142,7 +142,7 @@ function buildPicks(comics, illus, oils) {
     .sort((a, b) => (b.worksPickOrder || 0) - (a.worksPickOrder || 0))
     .slice(0, n);
 
-  const catBlock = (key, works, all) => {
+  const catBlock = (key, works, all, variant) => {
     const m = CHAPTER_META[key];
     const picked = pick(all, PICKS[key]);
     if (!picked.length) return null;
@@ -151,16 +151,18 @@ function buildPicks(comics, illus, oils) {
         h('h2', { class: 'serif picks__title' }, m.zh),
         h('a', { class: 'link', href: m.link }, [`查看全部 ${all.length} 件`, h('span', { class: 'arrow' }, '→')]),
       ]),
-      h('div', { class: 'picks__list' }, works),
+      // variant 修饰类：illustration 用 --illus（CSS columns 自然流，无 Grid 行孔大空白）；
+      // comic / oil 沿用默认 .picks__list，视觉保持不变。
+      h('div', { class: `picks__list picks__list--${variant}` }, works),
     ]);
   };
 
   return [
-    catBlock('comic', pick(comics, PICKS.comic).map((w, i) => comicRow(w, i, i === 0)), comics),
+    catBlock('comic', pick(comics, PICKS.comic).map((w, i) => comicRow(w, i, i === 0)), comics, 'comic'),
     catBlock('illustration', pick(illus, PICKS.illustration).map((w, i) =>
-      workCard(w, i, { eager: false, noReveal: true, sizes: SZ.masonry })), illus),
+      workCard(w, i, { eager: false, noReveal: true, sizes: SZ.masonry })), illus, 'illus'),
     catBlock('oil', pick(oils, PICKS.oil).map((w, i) =>
-      workCard(w, i, { eager: false, noReveal: true, sizes: SZ.oil })), oils),
+      workCard(w, i, { eager: false, noReveal: true, sizes: SZ.oil })), oils, 'oil'),
   ].filter(Boolean);
 }
 
