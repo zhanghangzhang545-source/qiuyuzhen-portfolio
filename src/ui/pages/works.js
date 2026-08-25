@@ -211,7 +211,14 @@ export async function worksView(params, query) {
         return byCustom(a, b);
       }
     });
-    head.querySelector('.count').textContent = `共 ${data.length} 件`;
+    // P0-5：默认「全部作品」页显示精选数与总数（精选 5 件 · 全部 25 件）；分类页保持「共 X 件」。
+    const countEl = head.querySelector('.count');
+    if (!t) {
+      const picksCount = list.filter((w) => w.worksPick && w.type !== 'certificate' && w.public !== false).length;
+      countEl.textContent = `精选 ${picksCount} 件 · 全部 ${data.length} 件`;
+    } else {
+      countEl.textContent = `共 ${data.length} 件`;
+    }
     results.innerHTML = '';
     if (!data.length) {
       results.appendChild(emptyState('没有匹配的作品', '试试调整筛选条件，或点击“重置”。'));

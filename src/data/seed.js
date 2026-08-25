@@ -13,7 +13,7 @@ import { ASSET } from './assets.gen.js';
 //   插画 3（接雨草树林2.0ver / 梦里的风景 / 献上战舞）+ 油画 1（拐弯处的光）+ 漫画 2（2021 毕业设计 / 2026 代代木毕业设计）
 // 注意：i12 = 梦里的风景（首页精选必须含它，不得用 i14《真实的自己》替代）
 const ILLU_FEATURED = new Set(['i01', 'i12', 'i13']);
-const OIL_FEATURED = new Set(['oil1']);
+const OIL_FEATURED = new Set(['oil1', 'oil2']);
 const COMIC_FEATURED = new Set(['comic-grad2021', 'comic-yoyogi2026']);
 
 // A4 数据模型预留字段：displaySize（枚举 standard / large-portrait / wide-feature）
@@ -90,7 +90,8 @@ export function buildSeed() {
       sort: featured ? 190 : 55 - i,
       public: true,
       featured,
-      homeFeaturedOrder: featured ? 94 : 0,
+      // P0-4：oil1=94 / oil2=92（不同序保证两幅并排且顺序确定），仅影响 Home Featured，不改变 Works Pick。
+      homeFeaturedOrder: featured ? (o.id === 'oil1' ? 94 : 92) : 0,
       displaySize: 'standard',
       ...pickOf(o.id),
       cover: o.file,

@@ -8,7 +8,7 @@
 //  收束：作品分类入口 + 关于预告
 // ============================================================
 import { h } from '../../core/dom.js';
-import { repo } from '../../data/services.js';
+import { repo, aboutRepo } from '../../data/services.js';
 import { imgEl } from '../components/media.js';
 import { workLabel, natureSub } from '../components/label.js';
 import { emptyState } from '../components/primitives.js';
@@ -47,6 +47,8 @@ export async function homeView() {
   // 消除 N+1：仅取一次 list（含全部公开数据：works + certificates），
   // 后续全部为本地内存过滤，不再重复发起全量请求。
   const full = await repo.filter({ publicOnly: true });
+  // P0-3：关于预告所需的姓名/拼音/简介/教育数全部读 aboutRepo（Mock 与 Supabase 同形状），绝不硬编码。
+  const about = await aboutRepo.read();
   const all = full.filter((w) => w.type !== 'certificate');
   const featured = full.filter((w) => w.featured && w.public !== false);
   // 证书单独从「公开完整数据」筛选，避免被上面排除 certificate 的 all 影响导致数量为 0
@@ -103,9 +105,13 @@ export async function homeView() {
         h('div', { class: 'hero__kicker' }, [
           h('span', {}, 'Illustration & Comic'),
         ]),
-        // P0-1：人物姓名层级反转 —— 邱钰真 = 第一视觉；QIU YUZHEN = 较小第二层级；简介 = 第三层级
-        h('h1', { class: 'hero__cn' }, '邱钰真'),
-        h('div', { class: 'hero__name' }, [h('span', {}, 'QIU'), h('span', {}, 'YUZHEN')]),
+        // P0-2-A（最终修复）：大写英文 QIU / YUZHEN 两行作为主视觉身份（最大层级），
+        //   中文姓名降为次级（小一号、不抢主视觉）；仅调行距/字距/字号/字重/左距与间距，不重做整站。
+        h('h1', { class: 'hero__name' }, [
+          h('span', { class: 'hero__line' }, 'QIU'),
+          h('span', { class: 'hero__line' }, 'YUZHEN'),
+        ]),
+        h('div', { class: 'hero__cn' }, '邱钰真'),
         h('p', { class: 'hero__lead' }, NEUTRAL_BIO),
       ]),
       h('button', {
@@ -143,6 +149,8 @@ export async function homeView() {
   ]) : null;
 
   // —— 专题 B：核心漫画专题（2026 代代木毕业设计：封面 + 3 张真实内页 + 27P 项目说明） ——
+  // P0-4（最终修复）：客户仅说「综合创作里有一张插画，看看排版」，未要求删内页；
+  //   恢复「封面 + 3 张真实内页预览 + 项目信息 + 开始阅读」结构（内页取 yoyogi.pages 前 3）。
   const topicB = (yoyogi && h('section', { class: 'section--dark section--tight' }, [
     h('div', { class: 'container' }, [
       topicHead('02', 'FEATURE COMIC', '核心漫画'),
@@ -151,12 +159,16 @@ export async function homeView() {
           imgEl(yoyogi.cover, null, yoyogi.title, { w: yoyogi.coverW, h: yoyogi.coverH, sizes: SZ.comicFeatCover })),
         h('div', { class: 'comics__feature-body' }, [
           h('div', { class: 'comics__feature-meta' }, [
-            // 客户反馈（圈出的多图区域做减法）：核心漫画专题仅保留封面作为单一视觉主体，
-            // 不再平铺 3 张内页预览，避免「多图争中心」；点击封面/开始阅读进入完整漫画阅读器。
             h('span', { class: 'comics__feature-proj' }, yoyogi.stage || natureSub(yoyogi) || '漫画作品'),
             workLabel({ num: '01', en: 'COMIC', title: yoyogi.title, sub: `${yoyogi.year} · ${natureSub(yoyogi)}` }),
-            h('a', { class: 'link link--light', href: `#/comic/${yoyogi.id}` }, ['开始阅读', h('span', { class: 'arrow' }, '→')]),
           ]),
+          // 3 张真实内页预览（数据驱动，取前 3 页）
+          (yoyogi.pages && yoyogi.pages.length
+            ? h('div', { class: 'comics__pages' },
+                yoyogi.pages.slice(0, 3).map((p) =>
+                  imgEl(p.image, null, yoyogi.title, { w: p.w, h: p.h, sizes: SZ.comicFeatPages })))
+            : null),
+          h('a', { class: 'link link--light', href: `#/comic/${yoyogi.id}` }, ['开始阅读', h('span', { class: 'arrow' }, '→')]),
         ]),
       ]),
     ]),
@@ -192,20 +204,23 @@ export async function homeView() {
     h('div', { class: 'catindex' }, catIndex),
   ]);
 
-  // —— 关于预告（暖白，纯文字 + 数据） ——
-  const eduCount = 2;
+  // —— 关于预告（暖白，纯文字 + 数据；P0-3：姓名/拼音/简介/教育数全部读 aboutRepo，绝不硬编码） ——
+  const fullName = (about && about.fullName) || '邱钰真';
+  const pinyin = (about && about.pinyin) || 'QIU YUZHEN';
+  const bio = (about && about.bio) || '插画与漫画创作者。本科毕业于中国传媒大学南广学院漫画与插画专业，后于日本代代木动画学院进修漫画。';
+  const eduCount = (about && about.education && about.education.length) || 2;
   const comicCount = comics.length;
   const certCount = certs.length;
   const aboutSec = h('section', { class: 'section container section--tight' }, [
     h('div', { class: 'intro-teaser' }, [
       h('div', {}, [
         h('div', { class: 'eyebrow' }, 'ABOUT'),
-        // A1 桌面反馈：中文姓名（宋体字标，已冻结方向）+ 大写拼音（小一级，同排）
+        // P0-2-B：中文姓名（宋体字标，已冻结方向）+ 大写拼音（加括号、更小一级，同排）
         h('div', { class: 'intro-teaser__name-row' }, [
-          h('h2', { class: 'serif' }, '邱钰真'),
-          h('span', { class: 'intro-teaser__pinyin' }, 'QIU YUZHEN'),
+          h('h2', { class: 'serif' }, fullName),
+          h('span', { class: 'intro-teaser__pinyin' }, `(${pinyin})`),
         ]),
-        h('p', { class: 'lead' }, '插画与漫画创作者。本科毕业于中国传媒大学南广学院漫画与插画专业，后于日本代代木动画学院进修漫画。'),
+        h('p', { class: 'lead' }, bio),
         h('div', { style: { marginTop: '24px' } }, h('a', { class: 'link', href: '#/about' }, ['阅读完整简历', h('span', { class: 'arrow' }, '→')])),
       ]),
       h('div', { class: 'intro-teaser__stats' }, [

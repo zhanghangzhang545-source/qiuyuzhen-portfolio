@@ -201,10 +201,10 @@ export class SupabaseWorkRepository extends WorkRepository {
     for (const r of rows) {
       const w = await this._mapWorkRow(r, mediaMap);
       if (r.type === 'comic') {
-        const pr = (pagesByWork.get(r.id) || []).sort((a, b) => (a.page_number || a.sort_order) - (b.page_number || b.sort_order));
+        const pr = (pagesByWork.get(r.id) || []).sort((a, b) => (a.sort_order || a.page_number) - (b.sort_order || b.page_number));
         w.pages = pr.map((m, i) => ({
           id: m.id,
-          order: m.page_number || (i + 1),
+          order: m.sort_order || m.page_number || (i + 1),
           image: this._assetDisplayUrl(mediaMap.get(m.media_asset_id)),
           w: mediaMap.get(m.media_asset_id)?.originalWidth || null,
           h: mediaMap.get(m.media_asset_id)?.originalHeight || null,

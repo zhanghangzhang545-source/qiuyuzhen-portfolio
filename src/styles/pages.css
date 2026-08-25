@@ -36,21 +36,18 @@
   display: flex; align-items: center; gap: var(--s3); margin-bottom: var(--s4);
   font-size: 12px; letter-spacing: .22em; text-transform: uppercase; color: var(--ink-on-dark-2);
 }
-/* P0-1 / Final Gate：姓名层级反转 —— .hero__cn（邱钰真）为第一视觉，单行不拆；
-   .hero__name（QIU YUZHEN）降为小一级第二层级 */
-.hero__cn {
-  font-family: var(--font-display); font-weight: 500; line-height: 1.02; letter-spacing: .02em;
-  font-size: clamp(46px, 8.4vw, 124px); margin: 0; color: var(--ink-on-dark);
-  white-space: nowrap;       /* 中文姓名必须完整单行，不拆成两行 */
-}
+/* P0-2-A（最终修复）：大写英文 QIU / YUZHEN 两行作为主视觉身份（最大层级）；
+   中文姓名降为次级（小一号、不抢主视觉）。仅调行距/字距/字号/字重/左距与间距，不重做整站。 */
 .hero__name {
-  /* 客户反馈：大写英文更舒展透气（字距放大），与中文姓名、简介组成一个紧凑信息组 */
-  font-family: var(--font-display); font-weight: 500; line-height: 1.12; letter-spacing: .26em;
-  font-size: clamp(18px, 2vw, 30px); margin-top: var(--s2); color: var(--ink-on-dark-2);
+  font-family: var(--font-display); font-weight: 800; line-height: 1.04; letter-spacing: .03em;
+  font-size: clamp(48px, 9.2vw, 132px); margin: 0; color: var(--ink-on-dark); text-transform: uppercase;
 }
-.hero__name span { display: inline-block; }
-.hero__name span:first-child { margin-right: .42em; }
-.hero__lead { font-family: var(--font-sans); font-size: clamp(14px, 1.3vw, 16px); line-height: 1.7; color: var(--ink-on-dark-2); margin-top: var(--s3); max-width: 34ch; }
+.hero__name .hero__line { display: block; }   /* 两行堆叠：QIU / YUZHEN（行距 1.04 透气，不糊在一起） */
+.hero__cn {
+  font-family: var(--font-display); font-weight: 500; line-height: 1.2; letter-spacing: .12em;
+  font-size: clamp(20px, 2.4vw, 30px); margin-top: var(--s3); color: var(--ink-on-dark-2);
+}
+.hero__lead { font-family: var(--font-sans); font-size: clamp(14px, 1.3vw, 16px); line-height: 1.7; color: var(--ink-on-dark-2); margin-top: var(--s4); max-width: 34ch; }
 .hero__scroll {
   display: inline-flex; align-items: center; gap: 10px; align-self: flex-end;
   font-size: 13px; letter-spacing: .18em; text-transform: uppercase; color: var(--ink-on-dark);
@@ -150,10 +147,10 @@
 /* A1 桌面反馈：姓名行（中文宋体字标 + 大写拼音小一级同排，拼音不抢主名层级） */
 .intro-teaser__name-row { display: flex; align-items: baseline; gap: var(--s4); flex-wrap: wrap; margin: var(--s3) 0 var(--s4); }
 .intro-teaser__name-row h2 { margin: 0; }
-.intro-teaser__pinyin { font-family: var(--font-display); font-size: clamp(15px, 1.5vw, 20px); letter-spacing: .14em; color: var(--ink-3); font-weight: 400; }
+.intro-teaser__pinyin { font-family: var(--font-display); font-size: clamp(13px, 1.3vw, 17px); letter-spacing: .14em; color: var(--ink-3); font-weight: 400; }
 /* A1 桌面反馈：人物介绍正文桌面端适当提高字号与行高（仅本区，不全站放大） */
 @media (min-width: 721px) {
-  .intro-teaser .lead { font-size: clamp(20px, 1.7vw, 23px); line-height: 1.85; }
+  .intro-teaser .lead { font-size: clamp(21px, 1.9vw, 25px); line-height: 1.8; }
 }
 .intro-teaser__stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--s5); border-left: 1px solid var(--line); padding-left: var(--s7); }
 .intro-teaser__num { font-size: clamp(40px, 5vw, 72px); line-height: 1; color: var(--ink); }
