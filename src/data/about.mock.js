@@ -24,7 +24,7 @@ export class MockAboutRepository {
     if (this._data) return this._data;
     this._data = {
       fullName: '邱钰真',
-      pinyin: 'QIU YUZHEN',
+      pinyin: 'QIU YU ZHEN',
       bio: '以插画与漫画为主要创作方向，关注角色、叙事与氛围表达。',
       creativeDirection: '插画创作 / 漫画创作 / 油画',
       avatarAssetId: null,

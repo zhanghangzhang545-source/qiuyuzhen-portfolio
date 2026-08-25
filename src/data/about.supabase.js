@@ -49,7 +49,7 @@ export class SupabaseAboutRepository {
     const profile = pRes.data || {};
     return {
       fullName: profile.full_name || '邱钰真',
-      pinyin: profile.pinyin || 'QIU YUZHEN',
+      pinyin: profile.pinyin || 'QIU YU ZHEN',
       bio: profile.bio || '',
       creativeDirection: profile.creative_direction || '',
       avatarAssetId: profile.avatar_asset_id || null,
@@ -85,7 +85,7 @@ export class SupabaseAboutRepository {
     const profile = pRes.data || {};
     return {
       fullName: profile.full_name || '邱钰真',
-      pinyin: profile.pinyin || 'QIU YUZHEN',
+      pinyin: profile.pinyin || 'QIU YU ZHEN',
       bio: profile.bio || '',
       creativeDirection: profile.creative_direction || '',
       avatarAssetId: profile.avatar_asset_id || null,

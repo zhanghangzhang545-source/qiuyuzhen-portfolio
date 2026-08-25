@@ -206,7 +206,7 @@ export async function homeView() {
 
   // —— 关于预告（暖白，纯文字 + 数据；P0-3：姓名/拼音/简介/教育数全部读 aboutRepo，绝不硬编码） ——
   const fullName = (about && about.fullName) || '邱钰真';
-  const pinyin = (about && about.pinyin) || 'QIU YUZHEN';
+  const pinyin = (about && about.pinyin) || 'QIU YU ZHEN';
   const bio = (about && about.bio) || '插画与漫画创作者。本科毕业于中国传媒大学南广学院漫画与插画专业，后于日本代代木动画学院进修漫画。';
   const eduCount = (about && about.education && about.education.length) || 2;
   const comicCount = comics.length;
