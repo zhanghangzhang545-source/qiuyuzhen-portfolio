@@ -131,6 +131,28 @@ function illustrationGrid(list, eagerFirst = false) {
 // 客户给出正式名单后只改 seed.js 的 featured 集，本结构不改。各分类页（/works/comic 等）仍展示完整作品。
 const PICKS = { comic: 1, illustration: 3, oil: 1 };
 
+/**
+ * 精选插画 3 件布局：两个独立纵向 flex column，避免 Grid 行孔/columns 浏览器自动平衡
+ * 带来的大空白。识别竖图（coverH > coverW）单独放右列，两张横图自然堆叠在左列，
+ * 顶部对齐，卡片间仅留正常 gap。不裁图、不统一高度、不拉伸作品。
+ * 其它数量或比例分布回退到 CSS columns 自然流。
+ */
+function buildIllusPicksBody(works) {
+  const makeCard = (w, i) => workCard(w, i, { eager: false, noReveal: true, sizes: SZ.masonry });
+  if (works.length === 3) {
+    const portrait = works.find((w) => w.coverH > w.coverW);
+    const landscapes = works.filter((w) => w.coverH <= w.coverW);
+    if (portrait && landscapes.length === 2) {
+      return h('div', { class: 'picks__list picks__list--illus-flex' }, [
+        h('div', { class: 'picks__col' }, landscapes.map((w, i) => makeCard(w, i))),
+        h('div', { class: 'picks__col' }, [makeCard(portrait, 1)]),
+      ]);
+    }
+  }
+  // 回退：CSS columns 自然流
+  return h('div', { class: 'picks__list picks__list--illus' }, works.map((w, i) => makeCard(w, i)));
+}
+
 /** 精选入口：每类一个块（标题 + 查看全部 + 精选作品），桌面与手机统一结构（CSS 控制布局） */
 function buildPicks(comics, illus, oils) {
   // 「作品库精选入口」严格使用 works_pick / works_pick_order（与首页 home_featured 完全独立）。
@@ -159,8 +181,7 @@ function buildPicks(comics, illus, oils) {
 
   return [
     catBlock('comic', pick(comics, PICKS.comic).map((w, i) => comicRow(w, i, i === 0)), comics, 'comic'),
-    catBlock('illustration', pick(illus, PICKS.illustration).map((w, i) =>
-      workCard(w, i, { eager: false, noReveal: true, sizes: SZ.masonry })), illus, 'illus'),
+    catBlock('illustration', buildIllusPicksBody(pick(illus, PICKS.illustration)), illus, 'illus'),
     catBlock('oil', pick(oils, PICKS.oil).map((w, i) =>
       workCard(w, i, { eager: false, noReveal: true, sizes: SZ.oil })), oils, 'oil'),
   ].filter(Boolean);
