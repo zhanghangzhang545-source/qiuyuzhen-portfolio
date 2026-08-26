@@ -26,7 +26,7 @@ export function renderNav() {
   return h('header', { class: cls },
     h('div', { class: 'container site-nav__inner' }, [
       h('a', { class: 'brand', href: '#/' }, [
-        h('span', { class: 'brand__mark' }, 'QIU YUZHEN'),
+        h('span', { class: 'brand__mark' }, 'QIU YU ZHEN'),
         h('span', { class: 'brand__sub' }, '插画 · 漫画 · 油画'),
       ]),
       navLinks, toggle,
@@ -53,7 +53,7 @@ export function renderFooter() {
   return h('footer', { class: 'site-footer' },
     h('div', { class: 'container site-footer__inner' }, [
       h('div', { class: 'site-footer__brand' }, [
-        h('div', {}, 'QIU YUZHEN'),
+        h('div', {}, 'QIU YU ZHEN'),
         h('span', { class: 'qy-colophon' }, '邱钰真 · 插画 / 漫画 / 油画作品集'),
         h('span', { class: 'qy-colophon' }, 'ART PORTFOLIO · EDITION 2026'),
       ]),
@@ -64,7 +64,7 @@ export function renderFooter() {
       ]),
       h('div', { class: 'site-footer__note' }, [
         h('span', { class: 'edi-reg' }),
-        h('span', {}, '© 2026 QIU YUZHEN · PORTFOLIO'),
+        h('span', {}, '© 2026 QIU YU ZHEN · PORTFOLIO'),
       ]),
     ]));
 }

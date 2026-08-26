@@ -56,7 +56,7 @@
   .hero__kicker { display: none; }
   /* 手机封面：邱钰真（第一视觉）大、QIU YUZHEN（第二层级）小（P0-1 同层级反转）；英文更透气、与中文/简介成组 */
   /* P0-2-A（移动端同步）：英文两行主视觉、中文降为次级 */
-  .hero__name { font-size: clamp(40px, 13vw, 84px); color: var(--ink); margin-top: var(--s2); letter-spacing: .02em; line-height: 1.04; font-weight: 800; text-transform: uppercase; }
+  .hero__name { font-size: clamp(40px, 13vw, 84px); color: var(--ink); margin-top: var(--s2); letter-spacing: .03em; line-height: 1.08; font-weight: 600; text-transform: uppercase; }
   .hero__cn { font-size: clamp(16px, 4.4vw, 22px); color: var(--ink-2); margin-top: var(--s3); letter-spacing: .12em; }
   .hero__name .hero__line { display: block; }
   .hero__lead { font-size: 15px; margin-top: var(--s3); color: var(--ink-2); }

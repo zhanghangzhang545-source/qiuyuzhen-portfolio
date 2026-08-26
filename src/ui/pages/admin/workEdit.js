@@ -116,11 +116,11 @@ export async function adminWorkEditView(params) {
   const homeFeaturedOrderI = h('input', { type: 'number', value: existing?.homeFeaturedOrder || 0 });
   const worksPickSw = switchEl(existing ? !!existing.worksPick : false);
   const worksPickOrderI = h('input', { type: 'number', value: existing?.worksPickOrder || 0 });
-  // 展示尺寸（冻结枚举：standard / large-portrait / wide-feature）
+  // 展示尺寸（冻结枚举，但选项对客户可读：普通 / 竖版大图 / 横版通栏）
   const displaySizeSel = h('select', {}, [
-    h('option', { value: 'standard', selected: (existing?.displaySize || 'standard') === 'standard' }, 'standard（默认）'),
-    h('option', { value: 'large-portrait', selected: existing?.displaySize === 'large-portrait' }, 'large-portrait（竖版大图）'),
-    h('option', { value: 'wide-feature', selected: existing?.displaySize === 'wide-feature' }, 'wide-feature（横版独占）'),
+    h('option', { value: 'standard', selected: (existing?.displaySize || 'standard') === 'standard' }, '普通（默认）'),
+    h('option', { value: 'large-portrait', selected: existing?.displaySize === 'large-portrait' }, '竖版大图'),
+    h('option', { value: 'wide-feature', selected: existing?.displaySize === 'wide-feature' }, '横版通栏'),
   ]);
   // draft（无媒体草稿）：仅 Mock 模式新增入口，创建时不传媒体；SBS 模式 create 强制 is_public=false，无需此开关
   const draftSw = isSupabase ? null : switchEl(false);
@@ -325,7 +325,7 @@ export async function adminWorkEditView(params) {
       h('div', { class: 'field field--row' }, [worksPickSw.el, h('span', {}, 'Works Pick（作品库精选入口）')]),
       h('div', { class: 'field' }, [h('label', { class: 'field__label' }, 'Works Pick Order（作品库精选排序权重）'), worksPickOrderI]),
     ]),
-    h('div', { class: 'field' }, [h('label', { class: 'field__label' }, '展示尺寸（display_size，冻结枚举）'), displaySizeSel]),
+    h('div', { class: 'field' }, [h('label', { class: 'field__label' }, '展示尺寸（普通 / 竖版大图 / 横版通栏）'), displaySizeSel]),
     // C2 draft 创建开关（仅 Mock 新增时可用）
     (!isEdit && !isSupabase && draftSw) ? h('div', { class: 'field field--row' }, [draftSw.el, h('span', {}, '保存为无媒体草稿（不公开，封面/图片留空，可在后续补全）')]) : null,
     statusBar,
@@ -369,7 +369,7 @@ function renderReadOnly(w) {
     field('Home Featured Order（首页精选排序权重）', w.homeFeaturedOrder != null && w.homeFeaturedOrder !== 0 ? String(w.homeFeaturedOrder) : '—'),
     field('Works Pick（作品库精选入口）', w.worksPick ? '是' : '—'),
     field('Works Pick Order（作品库精选排序权重）', w.worksPickOrder != null && w.worksPickOrder !== 0 ? String(w.worksPickOrder) : '—'),
-    field('展示尺寸', w.displaySize || 'standard'),
+    field('展示尺寸', ({ standard: '普通', 'large-portrait': '竖版大图', 'wide-feature': '横版通栏' })[w.displaySize] || '普通'),
     field('排序权重', String(w.sort || 0)),
     h('div', { class: 'field' }, [h('label', { class: 'field__label' }, '媒体'), media]),
   ]);

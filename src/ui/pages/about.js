@@ -84,16 +84,19 @@ export async function aboutView() {
   const firstCert = certs.find((c) => c.id === CERT_FIRST_ID) || null;
   const restCerts = certs.filter((c) => c.id !== CERT_FIRST_ID);
 
-  const certItem = (c, sizes) => h('button', { class: 'cv-cert', type: 'button', on: { click: () => openLightbox(c.cover, c.title) } }, [
+  const certItem = (c, sizes, solo = false) => h('button', { class: `cv-cert${solo ? ' cv-cert--solo' : ''}`, type: 'button', on: { click: () => openLightbox(c.cover, c.title) } }, [
     h('div', { class: 'cv-cert__media' }, imgEl(c.cover, null, c.title, { w: c.coverW, h: c.coverH, sizes })),
     h('div', { class: 'cv-cert__title' }, c.title),
   ]);
 
   // 显式首位：c01_rot 永远第一；其余证书按真实比例自然排列（横宽展 / 竖并排）。
+  // rest 末尾若为奇数落单（当前 5 张→末张单独成行），标记 solo：整行居中、限宽半列，避免右半列大空洞。
+  const restIsOdd = restCerts.length % 2 === 1;
   const certLayout = certs.length
     ? h('div', { class: 'cv-cert-layout' }, [
         firstCert ? h('div', { class: 'cv-cert-row cv-cert-row--first' }, [certItem(firstCert, SZ.certLandscape)]) : null,
-        restCerts.length ? h('div', { class: 'cv-cert-row cv-cert-row--rest' }, restCerts.map((c) => certItem(c, (c.coverW || 0) < (c.coverH || 0) ? SZ.certPortrait : SZ.certLandscape))) : null,
+        restCerts.length ? h('div', { class: 'cv-cert-row cv-cert-row--rest' }, restCerts.map((c, i) =>
+          certItem(c, (c.coverW || 0) < (c.coverH || 0) ? SZ.certPortrait : SZ.certLandscape, restIsOdd && i === restCerts.length - 1))) : null,
       ].filter(Boolean))
     : null;
 
@@ -102,7 +105,7 @@ export async function aboutView() {
       h('div', { class: 'about__head' }, [
         h('div', { class: 'eyebrow' }, '个人介绍 · ABOUT'),
         h('h1', { class: 'about__name' }, A.fullName || '邱钰真'),
-        h('div', { class: 'about__role' }, `${A.pinyin || 'QIU YUZHEN'} · 插画 / 漫画 / 油画`),
+        h('div', { class: 'about__role' }, `${A.pinyin || 'QIU YU ZHEN'} · 插画 / 漫画 / 油画`),
         h('p', { class: 'about__lead' }, `${NEUTRAL_BIO} 创作涵盖插画、漫画与油画。`),
       ]),
       h('div', { class: 'about__stats' }, [

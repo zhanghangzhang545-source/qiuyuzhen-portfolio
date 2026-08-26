@@ -41,7 +41,7 @@
 /* P1-1：QIU / YUZHEN 两行主视觉身份——小幅 typography 精修（不改结构）：
    行距 1.04 → 1.12（两行之间更透气，不再"糊在一起"）、字重 800 → 700（降厚重感）、字距 .03em → .04em（字母间稍松）。 */
 .hero__name {
-  font-family: var(--font-display); font-weight: 700; line-height: 1.12; letter-spacing: .04em;
+  font-family: var(--font-display); font-weight: 600; line-height: 1.14; letter-spacing: .03em;
   font-size: clamp(48px, 9.2vw, 132px); margin: 0; color: var(--ink-on-dark); text-transform: uppercase;
 }
 .hero__name .hero__line { display: block; }   /* 两行堆叠：QIU / YUZHEN（行距 1.04 透气，不糊在一起） */
@@ -239,7 +239,11 @@
    按作品真实比例排列，无 Grid 行孔 / 大面积无意义留白；不裁图、不统一固定高度、不拉伸。
    漫画 / 油画精选沿用默认网格，不受影响。 */
 .picks__list--illus-flex { display: flex; gap: var(--s5); align-items: flex-start; }
-.picks__list--illus-flex .picks__col { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: var(--s5); }
+/* P0-1：左列略窄、右列略宽，用列宽比例（非固定高度）自然配平两张横图叠起的总高与右侧竖图总高，
+   使两边视觉底部接近（目标 0–16px）。flex-basis:0 时宽度严格按 grow 比例分配。 */
+.picks__list--illus-flex .picks__col { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: var(--s5); }
+.picks__list--illus-flex .picks__col:first-child { flex-grow: 0.93; }
+.picks__list--illus-flex .picks__col:last-child { flex-grow: 1.07; }
 .picks__list--illus-flex .picks__col > .work-card { width: 100%; min-width: 0; align-self: stretch; }
 .picks__list--illus-flex .picks__col > .work-card .work-card__media { width: 100%; }
 /* 兼容回退：CSS columns 自然流（其它数量/比例分布时启用） */
@@ -278,11 +282,14 @@
 /* 证书：1 张主证书（大）+ 3 张辅助证书（小），有明确主次，不散落于大空白 */
 .cv-cert-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--s6); max-width: 900px; }
 /* 证书全部展示（客户反馈 B）：竖版并排一组、横版较宽一组，原比例、不裁切、点击放大 */
-.cv-cert-layout { display: flex; flex-direction: column; gap: var(--s6); max-width: 1040px; }
+/* P0-2 / P0-6：去掉不必要的 max-width，让证书在 About 正文可用宽度内充分展开（消除右侧事故型空白）。 */
+.cv-cert-layout { display: flex; flex-direction: column; gap: var(--s5); max-width: none; }
 .cv-cert-row { display: grid; gap: var(--s4); align-items: start; }
 /* 首张证书（c01_rot 横向）独占整行作为视觉焦点；其余证书 2 列自然排布（横/竖均按真实比例） */
 .cv-cert-row--first { grid-template-columns: 1fr; }
 .cv-cert-row--rest { grid-template-columns: repeat(2, 1fr); gap: var(--s5); }
+/* rest 末张奇数落单：整行居中、限宽半列，避免右半列大空洞（非孤项时不影响普通两列排布）。 */
+.cv-cert--solo { grid-column: 1 / -1; max-width: calc(50% - var(--s5) / 2); justify-self: center; }
 .cv-cert { text-align: left; background: transparent; border: 0; padding: 0; cursor: pointer; }
 .cv-cert__media { overflow: hidden; background: var(--paper-2); outline: 1px solid transparent; transition: outline-color .2s ease; }
 .cv-cert:hover .cv-cert__media { outline-color: var(--ink-2); }
