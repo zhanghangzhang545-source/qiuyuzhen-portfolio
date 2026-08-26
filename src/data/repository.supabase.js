@@ -915,12 +915,12 @@ export class SupabaseWorkRepository extends WorkRepository {
   async remove() {
     await this._c1OrThrow();
     // C2 不开放 destructive delete：返回明确 disabled 提示，供 UI 禁用按钮并提示「将在下一阶段开放」。
-    return { disabled: true, reason: '媒体删除将在下一阶段（C3）开放' };
+    return { disabled: true, reason: '媒体删除暂不开放' };
   }
   async removeComicPage() {
     await this._c1OrThrow();
     // C3 边界：删除仍谨慎 —— 本阶段仅支持新增/替换/排序，物理删除留后续阶段。
-    return { disabled: true, reason: '漫画页删除将在后续阶段开放（C3 仅支持新增 / 替换 / 排序）' };
+    return { disabled: true, reason: '漫画页删除暂不开放（支持新增 / 替换 / 排序）' };
   }
   async resetDemo() {
     await this._c1OrThrow();

@@ -119,7 +119,7 @@ export async function adminCertificateEditView(params) {
       setSaving(false);
     }
   } } }, [
-    h('div', { class: 'field' }, [h('label', { class: 'field__label' }, '证书图片（C3：可替换；删除留后续阶段）'), certCoverPrev, certReplace.el]),
+    h('div', { class: 'field' }, [h('label', { class: 'field__label' }, '证书图片（可替换；删除暂不开放）'), certCoverPrev, certReplace.el]),
     h('div', { class: 'form-grid' }, [
       h('div', { class: 'field' }, [h('label', { class: 'field__label' }, '证书名称'), titleI]),
       h('div', { class: 'field' }, [h('label', { class: 'field__label' }, '类别'), categoryI]),
@@ -143,9 +143,9 @@ export async function adminCertificateEditView(params) {
   return adminLayout('dashboard', h('div', {}, [
     h('div', { class: 'admin__head' }, [
       h('h1', {}, `编辑证书 · ${cert.title}`),
-      isSupabase ? h('span', { class: 'badge badge--live' }, '真实 Supabase') : h('span', { class: 'badge badge--readonly' }, 'Mock 数据'),
+      isSupabase ? h('span', { class: 'badge badge--live' }, '已连接云端') : h('span', { class: 'badge badge--readonly' }, '本地预览模式'),
     ]),
-    isSupabase ? h('div', { class: 'notice' }, '真实 Supabase 模式：仅保存结构化字段（名称 / 年份 / 类别 / 排序 / 展示）。证书图片替换与删除将在 C3 开放。') : null,
+    isSupabase ? h('div', { class: 'notice' }, '已连接云端：仅保存结构化字段（名称 / 年份 / 类别 / 排序 / 展示）。证书图片替换与删除暂不开放。') : null,
     form,
   ]));
 }

@@ -46,8 +46,8 @@ export async function adminLoginView() {
   return h('div', { class: 'login-wrap' }, h('div', { class: 'login-card' }, [
     h('h1', {}, '管理后台'),
     h('div', { class: 'sub' }, isSupabase
-      ? 'Supabase 管理员登录 · 需 admin_users 白名单授权'
-      : '单管理员登录 · Demo 账号 admin / demo1234（?mock=1 或未配置 Supabase）'),
+      ? '云端管理员登录 · 需管理员白名单授权'
+      : '本机预览登录 · Demo 账号 admin / demo1234（?mock=1 或未连接云端）'),
     form,
   ]));
 }

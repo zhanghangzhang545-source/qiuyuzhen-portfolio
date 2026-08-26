@@ -162,14 +162,14 @@ export async function adminWorkEditView(params) {
           h('button', { title: '上移', on: { click: () => move(i, i - 1) } }, '↑'),
           h('button', { title: '下移', on: { click: () => move(i, i + 1) } }, '↓'),
         ]),
-        h('button', { class: 'thumb__del', title: '删除将在后续阶段开放', disabled: true }, '×'),
+        h('button', { class: 'thumb__del', title: '为避免误删，删除暂不开放', disabled: true }, '×'),
       ]));
     }
   }
   renderImages();
 
   const imagesSection = h('div', { class: 'field' }, [
-    h('label', { class: 'field__label' }, '作品图片（C3：可上传 / 调整顺序；删除后续阶段开放）'),
+    h('label', { class: 'field__label' }, '作品图片（可上传 / 调整顺序；删除暂不开放）'),
     imgListWrap,
     imgUpload.el,
   ]);
@@ -312,7 +312,7 @@ export async function adminWorkEditView(params) {
       h('div', { class: 'field' }, [h('label', { class: 'field__label' }, '创作年份'), yearI]),
       h('div', { class: 'field' }, [h('label', { class: 'field__label' }, '创作阶段'), stageI, stageList]),
     ]),
-    h('div', { class: 'field' }, [h('label', { class: 'field__label' }, '封面（C3：可替换）'), coverPrev, coverUpload.el]),
+    h('div', { class: 'field' }, [h('label', { class: 'field__label' }, '封面（可替换）'), coverPrev, coverUpload.el]),
     imagesSection,
     h('div', { class: 'field' }, [h('label', { class: 'field__label' }, '标签（关键词，回车添加）'), tagsInput.el]),
     h('div', { class: 'form-grid' }, [
@@ -327,7 +327,7 @@ export async function adminWorkEditView(params) {
     ]),
     h('div', { class: 'field' }, [h('label', { class: 'field__label' }, '展示尺寸（display_size，冻结枚举）'), displaySizeSel]),
     // C2 draft 创建开关（仅 Mock 新增时可用）
-    (!isEdit && !isSupabase && draftSw) ? h('div', { class: 'field field--row' }, [draftSw.el, h('span', {}, '保存为无媒体草稿（不公开，封面/图片留空，可在 C3 补全）')]) : null,
+    (!isEdit && !isSupabase && draftSw) ? h('div', { class: 'field field--row' }, [draftSw.el, h('span', {}, '保存为无媒体草稿（不公开，封面/图片留空，可在后续补全）')]) : null,
     statusBar,
     h('div', { class: 'modal__actions', style: { justifyContent: 'flex-start', marginTop: '8px' } }, [
       submitBtn,
@@ -339,7 +339,7 @@ export async function adminWorkEditView(params) {
 
   return adminLayout('new', h('div', {}, [
     h('div', { class: 'admin__head' }, [h('h1', {}, isEdit ? `编辑 · 《${existing.title}》` : '新增作品')]),
-    isSupabase ? h('div', { class: 'notice' }, '真实 Supabase 模式：封面 / 多图上传经 Storage + media_assets 写入，但上传后作品保持「草稿」不自动公开；管理员点「发布到前台」才正式公开，可「下架」取消公开（可重新发布）。媒体物理删除仍禁用。') : null,
+    isSupabase ? h('div', { class: 'notice' }, '已连接云端：封面 / 多图上传经 Storage + media_assets 写入，但上传后作品保持「草稿」不自动公开；管理员点「发布到前台」才正式公开，可「下架」取消公开（可重新发布）。媒体物理删除暂不开放。') : null,
     form,
   ]));
 }

@@ -67,7 +67,7 @@ export async function adminComicPagesView(params) {
       });
       // 删除按钮：C3 仍谨慎 → disabled + 提示「后续阶段开放」
       const delBtn = h('button', {
-        class: 'thumb__del', title: '漫画页删除将在后续阶段开放（C3 仅支持新增 / 替换 / 排序）', disabled: true,
+        class: 'thumb__del', title: '为避免误删，漫画页删除暂不开放（支持新增 / 替换 / 排序）', disabled: true,
       }, '×');
       const t = h('div', { class: 'thumb' }, [
         imgEl(p.image, null, `第${p.order}页`),
@@ -91,7 +91,7 @@ export async function adminComicPagesView(params) {
       h('a', { class: 'btn btn--sm', href: `#/comic/${work.id}` }, '预览阅读'),
     ]),
     h('p', { class: 'secondary', style: { marginBottom: '16px' } },
-      '可用 ↑/↓ 调整阅读顺序（顺序即阅读顺序，page_number 不变）。C3：支持上传新页与替换单页图片；删除留后续阶段。'),
+      '可用 ↑/↓ 调整阅读顺序（顺序即阅读顺序，page_number 不变）。支持上传新页与替换单页图片；删除暂不开放。'),
     pageUpload.el,
     h('div', { style: { marginTop: '24px' } }, list),
   ]);

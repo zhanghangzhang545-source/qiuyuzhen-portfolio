@@ -33,8 +33,8 @@ export async function adminAboutView() {
         h('h2', {}, '关于页数据读取失败'),
         h('p', {}, e.message || String(e)),
         h('p', { class: 'secondary' }, isSupabase
-          ? '请检查网络连通性与 Supabase 配置。正式模式不会回退 Mock。'
-          : 'Mock 数据读取异常。'),
+          ? '请检查网络连通性与云端配置。正式模式不会回退本地预览。'
+          : '本地预览数据读取异常。'),
       ]));
     }
   })();
@@ -42,9 +42,9 @@ export async function adminAboutView() {
   return adminLayout('about', h('div', {}, [
     h('div', { class: 'admin__head' }, [
       h('h1', {}, '关于页数据（编辑）'),
-      h('span', { class: isSupabase ? 'badge badge--live' : 'badge badge--readonly' }, isSupabase ? '编辑模式 · 真实 Supabase' : 'Mock 数据'),
+      h('span', { class: isSupabase ? 'badge badge--live' : 'badge badge--readonly' }, isSupabase ? '已连接云端' : '本地预览模式'),
     ]),
-    h('p', { class: 'secondary', style: { marginBottom: '16px' } }, '此页面可真实编辑「关于」页的来源数据（姓名 / 简介 / 教育 / 经历 / 技能 / 荣誉 / 联系）。增删与排序均写入 Supabase（Mock 模式写入本地回滚通道）。'),
+    h('p', { class: 'secondary', style: { marginBottom: '16px' } }, '此页面可真实编辑「关于」页的来源数据（姓名 / 简介 / 教育 / 经历 / 技能 / 荣誉 / 联系）。增删与排序均写入云端（本地预览模式则保存于本机）。'),
     wrap,
   ]));
 }

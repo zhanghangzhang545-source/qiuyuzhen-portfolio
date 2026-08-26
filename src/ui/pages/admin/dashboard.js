@@ -42,8 +42,8 @@ export async function adminDashboardView() {
         h('h2', {}, '数据读取失败'),
         h('p', {}, e.message || String(e)),
         h('p', { class: 'secondary' }, isSupabase
-          ? '请检查网络连通性与 Supabase 配置（SUPABASE_URL / PUBLISHABLE_KEY）。正式模式不会回退 Mock。'
-          : 'Mock 数据读取异常。'),
+          ? '请检查网络连通性与云端配置。正式模式不会回退本地预览。'
+          : '本地预览数据读取异常。'),
       ]));
     }
   }
@@ -95,7 +95,7 @@ function renderBody(works, s, isSupabase, onTogglePublish) {
             ? h('button', { class: 'icon-btn', title: '下架（取消公开，前台不可见）', on: { click: () => onTogglePublish(w, 'unpublish') } }, '下架')
             : h('button', { class: 'icon-btn', title: '发布（确认公开到前台）', on: { click: () => onTogglePublish(w, 'publish') } }, '发布'),
           h('button', {
-            class: 'icon-btn icon-btn--danger', title: '媒体删除将在后续阶段开放', disabled: true,
+            class: 'icon-btn icon-btn--danger', title: '为避免误删，媒体删除暂不开放', disabled: true,
           }, '🗑'),
         ])
       : h('div', { class: 'table__actions' }, [
@@ -103,7 +103,7 @@ function renderBody(works, s, isSupabase, onTogglePublish) {
           w.type === 'comic' ? h('a', { class: 'icon-btn', href: `#/admin/comic/${w.id}/pages`, title: '漫画页管理' }, '▦') : null,
           h('button', {
             class: 'icon-btn icon-btn--danger', title: '删除',
-            on: { click: () => toast('Mock 模式：删除入口仅在本地演示可用') },
+            on: { click: () => toast('本地预览模式：删除入口仅在本地演示可用') },
           }, '🗑'),
         ]);
     return h('tr', {}, [
@@ -129,7 +129,7 @@ function renderBody(works, s, isSupabase, onTogglePublish) {
     h('h1', {}, '仪表盘'),
     h('div', { class: 'spacer' }),
     isSupabase
-      ? h('span', { class: 'badge badge--live' }, '编辑模式 · 真实 Supabase')
+      ? h('span', { class: 'badge badge--live' }, '已连接云端')
       : h('a', { class: 'btn btn--primary', href: '#/admin/work/new' }, '新增作品'),
   ]);
 
@@ -137,7 +137,7 @@ function renderBody(works, s, isSupabase, onTogglePublish) {
   if (!isSupabase) {
     children.push(h('div', { style: { marginBottom: '16px' } }, h('button', { class: 'btn btn--sm' }, '重置为 Demo 数据（Mock）')));
   } else {
-    children.push(h('div', { class: 'notice' }, 'Phase 3-C3 已开放媒体写入与发布生命周期：作品字段 / 漫画页 / 证书 / 关于页皆可真实写入；上传媒体后作品保持草稿，须显式「发布」才公开到前台，可「下架」取消公开（可重新发布）。媒体物理删除仍禁用。'));
+    children.push(h('div', { class: 'notice' }, '已开放媒体写入与发布生命周期：作品字段 / 漫画页 / 证书 / 关于页皆可真实写入；上传媒体后作品保持草稿，须显式「发布」才公开到前台，可「下架」取消公开（可重新发布）。媒体物理删除暂不开放。'));
   }
   children.push(table);
   return h('div', {}, children);
