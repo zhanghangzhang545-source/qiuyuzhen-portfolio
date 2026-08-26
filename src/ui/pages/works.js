@@ -143,14 +143,22 @@ function buildIllusPicksBody(works) {
     const portrait = works.find((w) => w.coverH > w.coverW);
     const landscapes = works.filter((w) => w.coverH <= w.coverW);
     if (portrait && landscapes.length === 2) {
-      return h('div', { class: 'picks__list picks__list--illus-flex' }, [
-        h('div', { class: 'picks__col' }, landscapes.map((w, i) => makeCard(w, i))),
-        h('div', { class: 'picks__col' }, [makeCard(portrait, 1)]),
-      ]);
+      // 返回 {children, variant}：cols 直接作为 flex 子项，不嵌套 picks__list，
+      // 避免 catBlock 再套一层 .picks__list--illus（column-count:2）把 flex 撕碎。
+      return {
+        children: [
+          h('div', { class: 'picks__col' }, landscapes.map((w, i) => makeCard(w, i))),
+          h('div', { class: 'picks__col' }, [makeCard(portrait, 1)]),
+        ],
+        variant: 'illus-flex',
+      };
     }
   }
   // 回退：CSS columns 自然流
-  return h('div', { class: 'picks__list picks__list--illus' }, works.map((w, i) => makeCard(w, i)));
+  return {
+    children: works.map((w, i) => makeCard(w, i)),
+    variant: 'illus',
+  };
 }
 
 /** 精选入口：每类一个块（标题 + 查看全部 + 精选作品），桌面与手机统一结构（CSS 控制布局） */
@@ -164,26 +172,27 @@ function buildPicks(comics, illus, oils) {
     .sort((a, b) => (b.worksPickOrder || 0) - (a.worksPickOrder || 0))
     .slice(0, n);
 
-  const catBlock = (key, works, all, variant) => {
+  const catBlock = (key, body, all) => {
     const m = CHAPTER_META[key];
     const picked = pick(all, PICKS[key]);
     if (!picked.length) return null;
+    const { children, variant } = body;
     return h('section', { class: 'picks__cat' }, [
       h('div', { class: 'picks__head' }, [
         h('h2', { class: 'serif picks__title' }, m.zh),
         h('a', { class: 'link', href: m.link }, [`查看全部 ${all.length} 件`, h('span', { class: 'arrow' }, '→')]),
       ]),
-      // variant 修饰类：illustration 用 --illus（CSS columns 自然流，无 Grid 行孔大空白）；
-      // comic / oil 沿用默认 .picks__list，视觉保持不变。
-      h('div', { class: `picks__list picks__list--${variant}` }, works),
+      // variant 修饰类：illus-flex=两个独立纵向 flex column（左 2 横图堆叠 / 右 1 竖图）；
+      // illus=CSS columns 自然流（其它数量/比例分布时启用）。
+      h('div', { class: `picks__list picks__list--${variant}` }, children),
     ]);
   };
 
   return [
-    catBlock('comic', pick(comics, PICKS.comic).map((w, i) => comicRow(w, i, i === 0)), comics, 'comic'),
-    catBlock('illustration', buildIllusPicksBody(pick(illus, PICKS.illustration)), illus, 'illus'),
-    catBlock('oil', pick(oils, PICKS.oil).map((w, i) =>
-      workCard(w, i, { eager: false, noReveal: true, sizes: SZ.oil })), oils, 'oil'),
+    catBlock('comic', { children: pick(comics, PICKS.comic).map((w, i) => comicRow(w, i, i === 0)), variant: 'comic' }, comics),
+    catBlock('illustration', buildIllusPicksBody(pick(illus, PICKS.illustration)), illus),
+    catBlock('oil', { children: pick(oils, PICKS.oil).map((w, i) =>
+      workCard(w, i, { eager: false, noReveal: true, sizes: SZ.oil })), variant: 'oil' }, oils),
   ].filter(Boolean);
 }
 

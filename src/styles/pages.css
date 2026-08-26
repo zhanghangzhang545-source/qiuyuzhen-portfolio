@@ -240,6 +240,8 @@
    漫画 / 油画精选沿用默认网格，不受影响。 */
 .picks__list--illus-flex { display: flex; gap: var(--s5); align-items: flex-start; }
 .picks__list--illus-flex .picks__col { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: var(--s5); }
+.picks__list--illus-flex .picks__col > .work-card { width: 100%; min-width: 0; align-self: stretch; }
+.picks__list--illus-flex .picks__col > .work-card .work-card__media { width: 100%; }
 /* 兼容回退：CSS columns 自然流（其它数量/比例分布时启用） */
 .picks__list--illus { display: block; column-count: 2; column-gap: var(--s5); }
 .picks__list--illus > .work-card { break-inside: avoid; width: 100%; margin: 0 0 var(--s6); display: block; }
