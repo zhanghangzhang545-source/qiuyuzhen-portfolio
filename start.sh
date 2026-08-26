@@ -1,7 +1,7 @@
 #!/bin/sh
 cd "$(dirname "$0")"
 PORT=8080
-echo "正在启动 QIU YUZHEN 艺术作品集（端口 $PORT）..."
+echo "正在启动 QIU YU ZHEN 艺术作品集（端口 $PORT）..."
 
 if command -v python3 >/dev/null 2>&1; then
   python3 -m http.server "$PORT" >/dev/null 2>&1 &

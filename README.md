@@ -1,4 +1,4 @@
-# QIU YUZHEN 作品集 · 客户交付说明（CLIENT DELIVERY）
+# QIU YU ZHEN 作品集 · 客户交付说明（CLIENT DELIVERY）
 
 艺术家：邱钰真（QIU YU ZHEN）· 插画 / 漫画 / 油画 个人作品集
 技术形态：零依赖静态网站（hash 路由单页应用），已接入 Supabase 真实云端（只读 + 后台结构化写入）。

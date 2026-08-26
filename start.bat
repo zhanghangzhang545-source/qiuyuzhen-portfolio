@@ -3,7 +3,7 @@ chcp 65001 >nul
 setlocal EnableDelayedExpansion
 cd /d "%~dp0"
 set PORT=8080
-echo 正在启动 QIU YUZHEN 艺术作品集（端口 !PORT!）...
+echo 正在启动 QIU YU ZHEN 艺术作品集（端口 !PORT!）...
 
 where python >nul 2>nul
 if %errorlevel%==0 (
