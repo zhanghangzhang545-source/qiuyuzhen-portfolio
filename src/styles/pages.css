@@ -242,8 +242,8 @@
 /* P0-1：左列略窄、右列略宽，用列宽比例（非固定高度）自然配平两张横图叠起的总高与右侧竖图总高，
    使两边视觉底部接近（目标 0–16px）。flex-basis:0 时宽度严格按 grow 比例分配。 */
 .picks__list--illus-flex .picks__col { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: var(--s5); }
-.picks__list--illus-flex .picks__col:first-child { flex-grow: 0.93; }
-.picks__list--illus-flex .picks__col:last-child { flex-grow: 1.07; }
+.picks__list--illus-flex .picks__col:first-child { flex-grow: 0.95; }
+.picks__list--illus-flex .picks__col:last-child { flex-grow: 1.05; }
 .picks__list--illus-flex .picks__col > .work-card { width: 100%; min-width: 0; align-self: stretch; }
 .picks__list--illus-flex .picks__col > .work-card .work-card__media { width: 100%; }
 /* 兼容回退：CSS columns 自然流（其它数量/比例分布时启用） */
