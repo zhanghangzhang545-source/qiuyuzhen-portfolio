@@ -60,11 +60,14 @@ export function mediaUploadControl(opts = {}) {
     stateEl.textContent = msg || '';
   }
   function setPreview(src) {
-    // revoke 旧 blob URL，避免内存泄漏 / 陈旧预览
+    // 仅 revoke「上一次」的旧 blob URL；signed / public URL 绝不动用 revokeObjectURL。
+    // 当前新传入的 src 即使是 blob: 也不会在内部被立即 revoke —— 它会被登记为 currentBlob，
+    // 等到下一次替换 / reset / 组件销毁时才 revoke，确保 <img> 真正使用期间该 URL 始终有效。
     if (currentBlob && globalThis.URL && URL.revokeObjectURL) {
       try { URL.revokeObjectURL(currentBlob); } catch (_) { /* ignore */ }
     }
-    currentBlob = null;
+    // 仅 blob: 前缀的本地预览 URL 需要登记为可 revoke 对象；其余（signed / public）一律不 revoke。
+    currentBlob = (src && typeof src === 'string' && src.startsWith('blob:')) ? src : null;
     currentSrc = src;
     previewEl.innerHTML = '';
     if (src) previewEl.appendChild(imgEl(src, null, '预览'));
@@ -74,6 +77,10 @@ export function mediaUploadControl(opts = {}) {
     setState('waiting', '');
     previewEl.innerHTML = '';
     currentSrc = null;
+    // reset 时若存在旧 blob，先 revoke 再清空，避免内存泄漏
+    if (currentBlob && globalThis.URL && URL.revokeObjectURL) {
+      try { URL.revokeObjectURL(currentBlob); } catch (_) { /* ignore */ }
+    }
     currentBlob = null;
   }
 
@@ -90,8 +97,9 @@ export function mediaUploadControl(opts = {}) {
       setState('success', '上传成功');
       // 上传完成立即显示真实本地预览（blob URL），不依赖公开可读；F5 后由后台回读 signed URL 兜底。
       if (showPreview && file && globalThis.URL && URL.createObjectURL) {
-        currentBlob = URL.createObjectURL(file);
-        setPreview(currentBlob);
+        // 先创建新 blob，再交给 setPreview 登记（setPreview 只 revoke「上一次」旧 blob，不会动当前新 blob）
+        const nextBlob = URL.createObjectURL(file);
+        setPreview(nextBlob);
       }
       toast('上传成功');
     } catch (err) {
