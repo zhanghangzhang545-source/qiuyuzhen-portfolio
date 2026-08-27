@@ -24,6 +24,8 @@ DECLARE
   v_aff   int;
   v_row   record;
   v_idx   int := 0;
+  v_is_pub boolean;
+  v_cur    int;
 BEGIN
   IF NOT public.is_admin() THEN
     RETURN jsonb_build_object('ok', false, 'error', 'forbidden');
@@ -84,6 +86,8 @@ DECLARE
   v_aff   int;
   v_row   record;
   v_idx   int := 0;
+  v_is_pub boolean;
+  v_cur    int;
 BEGIN
   IF NOT public.is_admin() THEN
     RETURN jsonb_build_object('ok', false, 'error', 'forbidden');
@@ -93,6 +97,16 @@ BEGIN
     FROM public.comic_pages WHERE id = p_page_id AND work_id = p_work_id;
   IF v_cnt <> 1 THEN
     RAISE EXCEPTION 'comic_page % not found for work % (count=%)', p_page_id, p_work_id, v_cnt;
+  END IF;
+
+  -- P0-七：公开漫画最后 1 页保护。已公开（is_public=true）且当前仅剩 1 页时禁止删除，
+  --   避免留下「is_public=true + comic_pages=0」的断图/空专题状态。草稿漫画（is_public=false）允许删成 0 页。
+  SELECT is_public INTO v_is_pub FROM public.works WHERE id = p_work_id;
+  IF v_is_pub IS TRUE THEN
+    SELECT count(*) INTO v_cur FROM public.comic_pages WHERE work_id = p_work_id;
+    IF v_cur <= 1 THEN
+      RAISE EXCEPTION '公开漫画至少需要保留1页。如需删除最后一页，请先下架漫画。';
+    END IF;
   END IF;
 
   DELETE FROM public.comic_pages WHERE id = p_page_id AND work_id = p_work_id;

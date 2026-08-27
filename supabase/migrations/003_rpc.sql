@@ -277,7 +277,7 @@ BEGIN
       FROM public.comic_pages cp WHERE cp.work_id = p_parent_id AND cp.media_asset_id = p_asset_id;
     SELECT w.type INTO v_work_type FROM public.works w WHERE w.id = p_parent_id;
     IF v_is_comic > 0 THEN
-      v_stage_prefix := 'staging/comic/';
+      v_stage_prefix := 'staging/works/comic/';
     ELSE
       v_stage_prefix := 'staging/works/' || COALESCE(v_work_type, '') || '/';
     END IF;
