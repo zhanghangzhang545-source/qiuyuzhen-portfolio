@@ -873,22 +873,22 @@ $$;
 
 -- ---- 权限（收回默认 + 仅赋 authenticated）----
 
-REVOKE ALL ON FUNCTION public.publish_asset(text, text, text, text, jsonb) FROM PUBLIC, anon, authenticated;;
-GRANT EXECUTE ON FUNCTION public.publish_asset(text, text, text, text, jsonb) TO authenticated;;
-REVOKE ALL ON FUNCTION public.unpublish_asset(text, text, text, text, jsonb) FROM PUBLIC, anon, authenticated;;
-GRANT EXECUTE ON FUNCTION public.unpublish_asset(text, text, text, text, jsonb) TO authenticated;;
-REVOKE ALL ON FUNCTION public.remove_work_image_and_reorder(text, text) FROM PUBLIC, anon, authenticated;;
-GRANT EXECUTE ON FUNCTION public.remove_work_image_and_reorder(text, text) TO authenticated;;
-REVOKE ALL ON FUNCTION public.remove_comic_page_and_reorder(text, text) FROM PUBLIC, anon, authenticated;;
-GRANT EXECUTE ON FUNCTION public.remove_comic_page_and_reorder(text, text) TO authenticated;;
-REVOKE ALL ON FUNCTION public.prepare_asset_public(text, text, text, text, jsonb) FROM PUBLIC, anon, authenticated;;
-GRANT EXECUTE ON FUNCTION public.prepare_asset_public(text, text, text, text, jsonb) TO authenticated;;
-REVOKE ALL ON FUNCTION public.prepare_asset_private(text, text, text, text, jsonb) FROM PUBLIC, anon, authenticated;;
-GRANT EXECUTE ON FUNCTION public.prepare_asset_private(text, text, text, text, jsonb) TO authenticated;;
-REVOKE ALL ON FUNCTION public.append_work_image(text, text) FROM PUBLIC, anon, authenticated;;
-GRANT EXECUTE ON FUNCTION public.append_work_image(text, text) TO authenticated;;
-REVOKE ALL ON FUNCTION public.append_comic_page(text, text) FROM PUBLIC, anon, authenticated;;
-GRANT EXECUTE ON FUNCTION public.append_comic_page(text, text) TO authenticated;;
+REVOKE ALL ON FUNCTION public.publish_asset(text, text, text, text, jsonb) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.publish_asset(text, text, text, text, jsonb) TO authenticated;
+REVOKE ALL ON FUNCTION public.unpublish_asset(text, text, text, text, jsonb) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.unpublish_asset(text, text, text, text, jsonb) TO authenticated;
+REVOKE ALL ON FUNCTION public.remove_work_image_and_reorder(text, text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.remove_work_image_and_reorder(text, text) TO authenticated;
+REVOKE ALL ON FUNCTION public.remove_comic_page_and_reorder(text, text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.remove_comic_page_and_reorder(text, text) TO authenticated;
+REVOKE ALL ON FUNCTION public.prepare_asset_public(text, text, text, text, jsonb) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.prepare_asset_public(text, text, text, text, jsonb) TO authenticated;
+REVOKE ALL ON FUNCTION public.prepare_asset_private(text, text, text, text, jsonb) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.prepare_asset_private(text, text, text, text, jsonb) TO authenticated;
+REVOKE ALL ON FUNCTION public.append_work_image(text, text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.append_work_image(text, text) TO authenticated;
+REVOKE ALL ON FUNCTION public.append_comic_page(text, text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.append_comic_page(text, text) TO authenticated;
 
 -- 通知 PostgREST 重新加载 schema（必须，否则新函数对 API 不可见）
 NOTIFY pgrst, 'reload schema';
