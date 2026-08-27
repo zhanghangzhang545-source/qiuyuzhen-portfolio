@@ -698,62 +698,113 @@ export class SupabaseWorkRepository extends WorkRepository {
     return `${parentId}__${parentType}__${t}${r}`;
   }
 
-  // —— 私有 Storage → 公开 Storage 可靠拷贝（item 1 核心修复）——
-  // 在调用 publish_asset（canonical flip）之前，必须先把真实 Storage 对象从
-  // portfolio-private 搬到 portfolio-public，并验证 public bucket 对象真实存在。
-  // 失败（拷贝 / 校验 / 发布任一环节）→ 清理本尝试创建的 public 拷贝，绝不产生
-  // public/private/DB 三方不一致；private 源对象始终保留（草稿资产不丢）。
-  async _copyStoragePrivateToPublic(path) {
+  // —— Storage canonical copy（private ↔ public），严格遵循线上 RPC 契约的路径前缀 ——
+  // 线上 publish_asset / unpublish_asset 强制校验路径前缀：
+  //   公开路径必须以 works/<type>/ | works/comic/ | certificates/ | avatars/ 开头；
+  //   staging（草稿）路径必须以 staging/works/<type>/ | staging/comic/ | staging/certificates/ | staging/avatars/ 开头。
+  // 因此拷贝时必须显式把「当前位置」映射到「目标 canonical 前缀路径」（basename 保持不变），
+  // 绝不沿用 flat key 直接穿堂，否则 RPC 会 RAISE 前缀校验错误（PGRST / 自定义 EXCEPTION）。
+  _baseName(p) {
+    if (!p) return '';
+    const i = p.lastIndexOf('/');
+    return i >= 0 ? p.slice(i + 1) : p;
+  }
+
+  // 根据父记录类型推导公开 canonical 前缀（与 RPC 内部 v_prefix 完全一致）
+  async _parentPublishPrefix(parentType, parentId) {
+    if (parentType === 'certificate') return 'certificates/';
+    if (parentType === 'avatar') return 'avatars/';
     const sb = await this._client();
-    const { data: dl, error: dlErr } = await sb.storage.from(PRIVATE_BUCKET).download(path);
-    if (dlErr || !dl) throw new Error(`读取 private 对象失败：${dlErr ? dlErr.message : 'empty'}`);
-    const { error: upErr } = await sb.storage.from(PUBLIC_BUCKET).upload(path, dl, {
+    const { data, error } = await sb.from('works').select('type').eq('id', parentId).maybeSingle();
+    if (error) throw new Error(`读取作品类型失败：${error.message}`);
+    const type = (data && data.type) || '';
+    if (type === 'comic') return 'works/comic/';
+    return `works/${type}/`;
+  }
+
+  // 读取资产真实 variants（无则空数组；绝不伪造结构）
+  async _readVariants(assetId) {
+    const sb = await this._client();
+    const { data, error } = await sb.from('media_variants').select('id, variant_path').eq('asset_id', assetId);
+    if (error) throw new Error(`读取 variants 失败：${error.message}`);
+    return data || [];
+  }
+
+  // 构造 RPC 所需的 variant_paths：真实读取 media_variants，路径按 RPC 前缀规则拼装
+  _buildVariantPaths(variants, prefix, staging) {
+    const pre = staging ? `staging/${prefix}` : prefix;
+    return (variants || []).map((v) => ({ variant_id: v.id, path: `${pre}${this._baseName(v.variant_path)}` }));
+  }
+
+  // 通用 Storage 对象拷贝（下载 src → 上传 dst，upsert 覆盖），并校验目标真实存在
+  async _copyStorageObject(srcBucket, srcPath, dstBucket, dstPath) {
+    const sb = await this._client();
+    const { data: dl, error: dlErr } = await sb.storage.from(srcBucket).download(srcPath);
+    if (dlErr || !dl) throw new Error(`读取对象失败（${srcBucket}/${srcPath}）：${dlErr ? dlErr.message : 'empty'}`);
+    const { error: upErr } = await sb.storage.from(dstBucket).upload(dstPath, dl, {
       cacheControl: '3600',
       upsert: true,
       contentType: (dl && dl.type) || 'application/octet-stream',
     });
-    if (upErr) throw new Error(`拷贝到 public 失败：${upErr.message}`);
-    // 验证 public bucket 对象真实存在（item 1：getPublicUrl 不能把不存在对象当成功）
-    const ok = await this._publicObjectExists(path);
-    if (!ok) throw new Error('public 对象校验失败：拷贝后不可读');
-    return this._publicUrl(PUBLIC_BUCKET, path);
+    if (upErr) throw new Error(`拷贝对象失败（${srcBucket}/${srcPath} → ${dstBucket}/${dstPath}）：${upErr.message}`);
+    const ok = await this._objectExists(dstBucket, dstPath);
+    if (!ok) throw new Error(`对象校验失败：拷贝后不可读（${dstBucket}/${dstPath}）`);
+    return this._publicUrl(dstBucket, dstPath);
   }
 
-  async _publicObjectExists(path) {
+  // 列举某个 bucket 下的对象（支持嵌套目录前缀），校验目标对象真实存在
+  async _objectExists(bucket, path) {
     const sb = await this._client();
-    const { data, error } = await sb.storage.from(PUBLIC_BUCKET).list('', { limit: 1000 });
-    if (error) throw new Error(`public 列举失败：${error.message}`);
-    const name = path.includes('/') ? path.substring(path.lastIndexOf('/') + 1) : path;
+    const i = path.lastIndexOf('/');
+    const dir = i >= 0 ? path.slice(0, i) : '';
+    const name = i >= 0 ? path.slice(i + 1) : path;
+    const { data, error } = await sb.storage.from(bucket).list(dir || '', { limit: 1000 });
+    if (error) throw new Error(`对象列举失败（${bucket}/${dir || ''}）：${error.message}`);
     return (data || []).some((o) => o.name === name);
   }
 
-  async _deletePublicStorage(path) {
+  async _deleteStorage(bucket, path) {
     const sb = await this._client();
-    const { error } = await sb.storage.from(PUBLIC_BUCKET).remove([path]);
-    if (error) throw new Error(`public 对象清理失败：${error.message}`);
+    const { error } = await sb.storage.from(bucket).remove([path]);
+    if (error) throw new Error(`对象清理失败（${bucket}/${path}）：${error.message}`);
     return true;
   }
 
-  // 发布单个资产：真实 Storage 拷贝（private→public）+ 校验 + publish_asset canonical flip。
+  // 兼容旧引用：删除公开对象
+  async _deletePublicStorage(path) {
+    return this._deleteStorage(PUBLIC_BUCKET, path);
+  }
+
+  // 发布单个资产：真实 Storage 拷贝（private→public 到 canonical 前缀路径）+ 校验 + publish_asset canonical flip。
+  // 必须按线上 RPC 真实签名传齐 5 个参数（p_asset_id / p_parent_type / p_parent_id / p_public_original_path / p_variant_paths），
+  // p_public_original_path 与 variant paths 全部来源于真实数据，绝不硬编码空串/伪造 []。
   // 任一环节失败 → 回滚本尝试的 public 拷贝，抛错（DB canonical 不被翻转）。
   async _publishAsset(assetId, parentType, parentId) {
     const sb = await this._requireAdmin();
     const { data: a, error: ae } = await sb.from('media_assets').select('original_path, bucket').eq('id', assetId).maybeSingle();
     if (ae) throw new Error(`读取资产失败：${ae.message}`);
     if (!a) throw new Error('发布资产失败：资产不存在');
-    const path = a.original_path;
-    // 仅当资产仍在 private 时才拷贝（已 public 则跳过，避免重复写）
+    const prefix = await this._parentPublishPrefix(parentType, parentId);
+    const publicPath = `${prefix}${this._baseName(a.original_path)}`;
     let publicPathCreated = false;
     if (a.bucket === PRIVATE_BUCKET) {
-      await this._copyStoragePrivateToPublic(path);
+      await this._copyStorageObject(PRIVATE_BUCKET, a.original_path, PUBLIC_BUCKET, publicPath);
       publicPathCreated = true;
     }
+    const variants = await this._readVariants(assetId);
+    const variantPaths = this._buildVariantPaths(variants, prefix, false);
     try {
-      const pub = await sb.rpc('publish_asset', { p_asset_id: assetId, p_parent_type: parentType, p_parent_id: parentId });
-      if (pub.error) throw new Error(`发布资产失败（服务端）：${this._rpcFail(pub, 'unknown')}`);
-      if (!pub.data || pub.data.ok !== true) throw new Error(`发布资产失败：${(pub.data && pub.data.error) || 'unknown'}`);
+      const pub = await sb.rpc('publish_asset', {
+        p_asset_id: assetId,
+        p_parent_type: parentType,
+        p_parent_id: parentId,
+        p_public_original_path: publicPath,
+        p_variant_paths: variantPaths,
+      });
+      if (pub.error) throw new Error(`发布资产失败（服务端）：${this._rpcFail(pub, '发布资产失败（服务端未返回明细）')}`);
+      if (!pub.data || pub.data.ok !== true) throw new Error(`发布资产失败：${(pub.data && pub.data.error) || '发布资产失败（服务端未返回明细）'}`);
     } catch (e) {
-      if (publicPathCreated) { try { await this._deletePublicStorage(path); } catch (_) { /* 回滚尽力而为 */ } }
+      if (publicPathCreated) { try { await this._deleteStorage(PUBLIC_BUCKET, publicPath); } catch (_) { /* 回滚尽力而为 */ } }
       throw e;
     }
   }
@@ -978,7 +1029,7 @@ export class SupabaseWorkRepository extends WorkRepository {
     return (assets || []).filter((a) => a.bucket === (bucket || a.bucket));
   }
 
-  /** 发布作品：将其全部 private 媒体拷贝到 public + 翻 canonical + works.is_public=true。任一失败回滚本尝试的 public 拷贝。 */
+  /** 发布作品：将其全部 private 媒体拷贝到 public（canonical 前缀路径）+ 翻 canonical + works.is_public=true。任一失败回滚本尝试的 public 拷贝。 */
   async publishWork(workId) {
     await this._requireAdmin();
     const sb = await this._client();
@@ -992,41 +1043,70 @@ export class SupabaseWorkRepository extends WorkRepository {
       if (pe) throw new Error(`漫画页读取失败：${pe.message}`);
       if (!pages || pages.length === 0) throw new Error('发布失败：漫画至少需要 1 页，请先添加漫画页再发布');
     }
+    const prefix = await this._parentPublishPrefix('work', workId);
     const privateAssets = await this._gatherWorkAssets(workId, PRIVATE_BUCKET);
     const publishedPublicPaths = [];
     try {
       for (const a of privateAssets) {
-        await this._copyStoragePrivateToPublic(a.original_path);
-        publishedPublicPaths.push(a.original_path);
-        const pub = await sb.rpc('publish_asset', { p_asset_id: a.id, p_parent_type: 'work', p_parent_id: workId });
-        if (pub.error) throw new Error(`发布资产失败（服务端）：${this._rpcFail(pub, 'unknown')}`);
-        if (!pub.data || pub.data.ok !== true) throw new Error(`发布资产失败：${(pub.data && pub.data.error) || 'unknown'}`);
+        const publicPath = `${prefix}${this._baseName(a.original_path)}`;
+        await this._copyStorageObject(PRIVATE_BUCKET, a.original_path, PUBLIC_BUCKET, publicPath);
+        const variants = await this._readVariants(a.id);
+        const variantPaths = this._buildVariantPaths(variants, prefix, false);
+        const pub = await sb.rpc('publish_asset', {
+          p_asset_id: a.id,
+          p_parent_type: 'work',
+          p_parent_id: workId,
+          p_public_original_path: publicPath,
+          p_variant_paths: variantPaths,
+        });
+        if (pub.error) throw new Error(`发布资产失败（服务端）：${this._rpcFail(pub, '发布资产失败（服务端未返回明细）')}`);
+        if (!pub.data || pub.data.ok !== true) throw new Error(`发布资产失败：${(pub.data && pub.data.error) || '发布资产失败（服务端未返回明细）'}`);
+        publishedPublicPaths.push(publicPath);
       }
       // 显式确保 works.is_public=true（最后一个资产的 publish_asset 已置位，再次确认稳妥）
       const { error } = await sb.from('works').update({ is_public: true }).eq('id', workId);
       if (error) throw new Error(`作品发布失败：${error.message}`);
     } catch (e) {
       // 回滚本尝试创建的 public 拷贝；private 源资产保留（草稿不丢）；DB canonical 未被翻转
-      for (const p of publishedPublicPaths) { try { await this._deletePublicStorage(p); } catch (_) { /* 尽力而为 */ } }
+      for (const p of publishedPublicPaths) { try { await this._deleteStorage(PUBLIC_BUCKET, p); } catch (_) { /* 尽力而为 */ } }
       throw e;
     }
     return this.getById(workId);
   }
 
-  /** 下架作品：翻 works.is_public=false；逐个 unpublish_asset（bucket→private）并清理 public 拷贝（private 源保留，可重新发布）。destructive delete 仍禁用。 */
+  /** 下架作品：翻 works.is_public=false；逐个 unpublish_asset（public canonical → private staging）并清理 public 拷贝（private 源保留，可重新发布）。destructive delete 仍禁用。 */
   async unpublishWork(workId) {
     await this._requireAdmin();
     const sb = await this._client();
+    const prefix = await this._parentPublishPrefix('work', workId);
     const publicAssets = await this._gatherWorkAssets(workId, PUBLIC_BUCKET);
-    for (const a of publicAssets) {
-      const un = await sb.rpc('unpublish_asset', { p_asset_id: a.id, p_parent_type: 'work', p_parent_id: workId });
-      if (un.error) throw new Error(`下架资产失败（服务端）：${this._rpcFail(un, 'unknown')}`);
-      if (!un.data || un.data.ok !== true) throw new Error(`下架资产失败：${(un.data && un.data.error) || 'unknown'}`);
-      // 清理 public 拷贝（保留 private 源，可重新发布）；destructive delete 仍禁用
-      try { await this._deletePublicStorage(a.original_path); } catch (_) { /* 尽力而为 */ }
+    const createdStaging = [];
+    try {
+      for (const a of publicAssets) {
+        const stagingPath = `staging/${prefix}${this._baseName(a.original_path)}`;
+        await this._copyStorageObject(PUBLIC_BUCKET, a.original_path, PRIVATE_BUCKET, stagingPath);
+        createdStaging.push(stagingPath);
+        const variants = await this._readVariants(a.id);
+        const variantPaths = this._buildVariantPaths(variants, prefix, true);
+        const un = await sb.rpc('unpublish_asset', {
+          p_asset_id: a.id,
+          p_parent_type: 'work',
+          p_parent_id: workId,
+          p_private_original_path: stagingPath,
+          p_variant_paths: variantPaths,
+        });
+        if (un.error) throw new Error(`下架资产失败（服务端）：${this._rpcFail(un, '下架资产失败（服务端未返回明细）')}`);
+        if (!un.data || un.data.ok !== true) throw new Error(`下架资产失败：${(un.data && un.data.error) || '下架资产失败（服务端未返回明细）'}`);
+        // 清理 public 拷贝（源已回到 private staging，可重新发布）；destructive delete 仍禁用
+        try { await this._deleteStorage(PUBLIC_BUCKET, a.original_path); } catch (_) { /* 尽力而为 */ }
+      }
+      const { error } = await sb.from('works').update({ is_public: false }).eq('id', workId);
+      if (error) throw new Error(`作品下架失败：${error.message}`);
+    } catch (e) {
+      // 回滚本尝试创建的 private staging 拷贝（RPC 未翻转 canonical，避免 private 孤儿）
+      for (const sp of createdStaging) { try { await this._deleteStorage(PRIVATE_BUCKET, sp); } catch (_) { /* 尽力而为 */ } }
+      throw e;
     }
-    const { error } = await sb.from('works').update({ is_public: false }).eq('id', workId);
-    if (error) throw new Error(`作品下架失败：${error.message}`);
     return this.getById(workId);
   }
 

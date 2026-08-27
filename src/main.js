@@ -4,7 +4,7 @@
 import { Router } from './core/router.js';
 import { renderNav, renderFooter, initSiteEffects } from './ui/components/site.js';
 import { homeView } from './ui/pages/home.js';
-import { worksView } from './ui/pages/works.js?v=20260826-final13';
+import { worksView } from './ui/pages/works.js?v=20260826-final14';
 import { workDetailView } from './ui/pages/workDetail.js';
 import { comicReaderView } from './ui/pages/comicReaderPage.js';
 import { aboutView } from './ui/pages/about.js';
