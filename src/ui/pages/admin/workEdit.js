@@ -79,12 +79,22 @@ export async function adminWorkEditView(params) {
   const coverUpload = mediaUploadControl({
     label: '替换封面',
     onUpload: async (file) => {
-      const updated = await repo.uploadWorkCover(existing.id, file);
-      cover.value = updated.cover;
-      renderCover();
-      Object.assign(existing, updated);
-      // 草稿封面为 private URL，前台不可预览；用本地对象 URL 即时预览（不依赖公开可读）
-      if (file && globalThis.URL && URL.createObjectURL) coverUpload.setPreview(URL.createObjectURL(file));
+      // 两阶段创建：新作品尚未生成 id 前，严禁访问 existing.id，转中文提示
+      if (!existing || !existing.id) {
+        const msg = '作品尚未创建，请先保存基础信息后再上传图片。';
+        toast(msg);
+        throw new Error(msg);
+      }
+      try {
+        const updated = await repo.uploadWorkCover(existing.id, file);
+        cover.value = updated.cover;
+        renderCover();
+        Object.assign(existing, updated);
+        // 草稿封面为 private URL，前台不可预览；用本地对象 URL 即时预览（不依赖公开可读）
+        if (file && globalThis.URL && URL.createObjectURL) coverUpload.setPreview(URL.createObjectURL(file));
+      } catch (err) {
+        throw new Error('封面上传失败，请检查网络后重试。');
+      }
     },
     onError: () => {},
   });
@@ -130,11 +140,21 @@ export async function adminWorkEditView(params) {
   const imgUpload = mediaUploadControl({
     label: '添加作品图片',
     onUpload: async (file) => {
-      const updated = await repo.addWorkImage(existing.id, file);
-      imagesState.length = 0;
-      (updated.images || []).forEach((s) => imagesState.push(s));
-      renderImages();
-      Object.assign(existing, updated);
+      // 两阶段创建：新作品尚未生成 id 前，严禁访问 existing.id，转中文提示
+      if (!existing || !existing.id) {
+        const msg = '作品尚未创建，请先保存基础信息后再上传图片。';
+        toast(msg);
+        throw new Error(msg);
+      }
+      try {
+        const updated = await repo.addWorkImage(existing.id, file);
+        imagesState.length = 0;
+        (updated.images || []).forEach((s) => imagesState.push(s));
+        renderImages();
+        Object.assign(existing, updated);
+      } catch (err) {
+        throw new Error('作品图片上传失败，请检查网络后重试。');
+      }
     },
     onError: () => {},
   });
@@ -145,6 +165,8 @@ export async function adminWorkEditView(params) {
       const src = imagesState[i];
       const move = async (from, to) => {
         if (to < 0 || to >= imagesState.length) return;
+        // 两阶段创建：尚未创建 id 时绝不访问 existing.id
+        if (!existing || !existing.id) { toast('作品尚未创建，请先保存基础信息后再调整顺序。'); return; }
         const order = imagesState.slice();
         [order[from], order[to]] = [order[to], order[from]];
         try {
@@ -171,7 +193,8 @@ export async function adminWorkEditView(params) {
   const imagesSection = h('div', { class: 'field' }, [
     h('label', { class: 'field__label' }, '作品图片（可上传 / 调整顺序；删除暂不开放）'),
     imgListWrap,
-    imgUpload.el,
+    // 两阶段创建：新作品尚未创建 id 前，只显示提示、不开真实上传操作
+    isEdit ? imgUpload.el : h('div', { class: 'notice' }, '请先填写作品基础信息并创建作品，创建成功后即可上传封面和作品图片。'),
   ]);
 
   // 作品性质字段：仅漫画类型显示；非漫画隐藏且不参与保存
@@ -293,6 +316,7 @@ export async function adminWorkEditView(params) {
       setStatus('success', isEdit ? '已保存修改' : '已新增作品');
       toast(isEdit ? '已保存修改' : '已新增作品');
       if (payload.type === 'comic' && !isEdit) location.hash = `#/admin/comic/${saved.id}/pages`;
+      else if (!isEdit) location.hash = `#/admin/work/${saved.id}/edit`;
       else location.hash = '#/admin';
     } catch (err) {
       // 失败：保留表单值、不跳页、显式提示（#6）
@@ -312,7 +336,7 @@ export async function adminWorkEditView(params) {
       h('div', { class: 'field' }, [h('label', { class: 'field__label' }, '创作年份'), yearI]),
       h('div', { class: 'field' }, [h('label', { class: 'field__label' }, '创作阶段'), stageI, stageList]),
     ]),
-    h('div', { class: 'field' }, [h('label', { class: 'field__label' }, '封面（可替换）'), coverPrev, coverUpload.el]),
+    h('div', { class: 'field' }, [h('label', { class: 'field__label' }, '封面（可替换）'), coverPrev, isEdit ? coverUpload.el : h('div', { class: 'notice' }, '请先填写作品基础信息并创建作品，创建成功后即可上传封面和作品图片。')]),
     imagesSection,
     h('div', { class: 'field' }, [h('label', { class: 'field__label' }, '标签（关键词，回车添加）'), tagsInput.el]),
     h('div', { class: 'form-grid' }, [
