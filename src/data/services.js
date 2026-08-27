@@ -112,8 +112,8 @@ const REPO_METHODS = [
   'list', 'getById', 'getByType', 'filter', 'stats',
   'create', 'update', 'remove', 'addComicPage', 'removeComicPage', 'removeWorkImage',
   'reorderComicPages', 'resetDemo', 'updateCertificate',
-  'uploadWorkCover', 'addWorkImage', 'replaceComicPageImage',
-  'replaceCertificateImage', 'adjustImageSort',
+  'uploadWorkCover', 'addWorkImage', 'replaceWorkImage',
+  'replaceComicPageImage', 'replaceCertificateImage', 'adjustImageSort',
   // Works 发布生命周期（item 2：草稿 / 发布 / 下架）
   'publishWork', 'unpublishWork',
 ];

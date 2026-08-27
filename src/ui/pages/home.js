@@ -55,7 +55,8 @@ export async function homeView() {
   const certs = full.filter((w) => w.type === 'certificate' && w.public !== false);
 
   // 主视觉固定用《旅途》（i09）—— Hero 维持独立 Hero 契约，不纳入首页 SELECTED 数据驱动选择。
-  const heroArt = byId(all, 'i09') || featured.find((w) => w.type === 'illustration') || featured[0] || all[0];
+  // P0-25：零公开作品时 heroArt 可能为 null，必须显式兜底为 null 并在使用处做 null guard，禁止崩溃。
+  const heroArt = byId(all, 'i09') || featured.find((w) => w.type === 'illustration') || featured[0] || all[0] || null;
 
   const counts = {};
   all.forEach((w) => (counts[w.type] = (counts[w.type] || 0) + 1));
@@ -97,8 +98,12 @@ export async function homeView() {
   const oil2 = homeOils[1] || null;
 
   // —— 第一屏：深色，《旅途》为视觉底层（方向保留） ——
+  // P0-25：heroArt 可能为空（零公开作品），null guard 后渲染中性占位，绝不访问 .cover/.title 崩溃。
+  const heroImg = heroArt
+    ? imgEl(heroArt.cover, 'hero__img', heroArt.title, { eager: true, w: heroArt.coverW, h: heroArt.coverH, sizes: SZ.hero })
+    : h('div', { class: 'hero__img hero__img--empty' });
   const hero = h('section', { class: 'hero' }, [
-    h('div', { class: 'hero__media' }, imgEl(heroArt.cover, 'hero__img', heroArt.title, { eager: true, w: heroArt.coverW, h: heroArt.coverH, sizes: SZ.hero })),
+    h('div', { class: 'hero__media' }, heroImg),
     h('div', { class: 'hero__scrim' }),
     h('div', { class: 'container hero__inner' }, [
       h('div', { class: 'hero__copy' }, [
@@ -208,7 +213,8 @@ export async function homeView() {
   const fullName = (about && about.fullName) || '邱钰真';
   const pinyin = (about && about.pinyin) || 'QIU YU ZHEN';
   const bio = (about && about.bio) || '插画与漫画创作者。本科毕业于中国传媒大学南广学院漫画与插画专业，后于日本代代木动画学院进修漫画。';
-  const eduCount = (about && about.education && about.education.length) || 2;
+  // P0-24：教育经历数量必须真实数据驱动——长度真实为 0 就显示 0，禁止 `|| 2` 兜底捏造。
+  const eduCount = (about && about.education && about.education.length) || 0;
   const comicCount = comics.length;
   const certCount = certs.length;
   const aboutSec = h('section', { class: 'section container section--tight' }, [

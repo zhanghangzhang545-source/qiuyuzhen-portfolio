@@ -112,7 +112,12 @@ export async function adminWorkEditView(params) {
   }
 
   // 多图状态（携带 bucket/path 元信息，供后台 signed URL 预览 / 删除时定位资产）
-  const _metaFromWork = (w) => (w?.imagesMeta || (w?.images || []).map((u) => ({ url: u, bucket: null, path: null })));
+  // P0-11：imagesMeta 携带稳定 id / assetId / sortOrder；图片身份绝不再用 URL。
+  const _metaFromWork = (w) => (
+    (w?.imagesMeta && w.imagesMeta.length)
+      ? w.imagesMeta.map((m) => ({ id: m.id, assetId: m.assetId ?? null, sortOrder: m.sortOrder ?? 0, url: m.url, bucket: m.bucket ?? null, path: m.path ?? null }))
+      : (w?.images || []).map((u, i) => ({ id: `img-${i}`, url: u, assetId: null, sortOrder: i, bucket: null, path: null }))
+  );
   const imagesState = existing ? _metaFromWork(existing).slice() : [];
   const titleI = h('input', { type: 'text', value: existing?.title || '', placeholder: '作品标题' });
   const introI = h('textarea', { placeholder: '作品简介' }, existing?.intro || '');
@@ -173,52 +178,88 @@ export async function adminWorkEditView(params) {
     onError: () => {},
   });
 
+  let imgBusy = false; // P0-28：图片区异步操作期间统一禁用交互，防双击/重复请求
   async function renderImages() {
     imgListWrap.innerHTML = '';
     for (let i = 0; i < imagesState.length; i++) {
       const meta = imagesState[i];
       const src = await adminPreviewSrc(meta.url, meta.bucket, meta.path);
+      const ctrls = [];
+      const setRowBusy = (on) => ctrls.forEach((c) => { if (c) c.disabled = on; });
       const move = async (from, to) => {
+        if (imgBusy) return;
         if (to < 0 || to >= imagesState.length) return;
         // 两阶段创建：尚未创建 id 时绝不访问 existing.id
         if (!existing || !existing.id) { toast('作品尚未创建，请先保存基础信息后再调整顺序。'); return; }
         const order = imagesState.slice();
         [order[from], order[to]] = [order[to], order[from]];
+        imgBusy = true; setRowBusy(true);
         try {
-          const updated = await repo.adjustImageSort(existing.id, order.map((m) => m.url));
+          // P0-11：以稳定 id 排序，不再用 URL
+          const updated = await repo.adjustImageSort(existing.id, order.map((m) => m.id));
           imagesState.length = 0;
           _metaFromWork(updated).forEach((m) => imagesState.push(m));
+          Object.assign(existing, updated);
           renderImages();
+          toast('顺序已更新');
         } catch (err) {
           toast(`排序失败：${err.message || err}`);
+          setRowBusy(false); imgBusy = false;
         }
       };
+      // C3：原位替换单图（repaint media_asset_id；保留位置，P0-12/13/14）
+      const replaceCtl = mediaUploadControl({
+        label: '替换', showPreview: false,
+        onUpload: async (file) => {
+          if (imgBusy) return;
+          if (!existing || !existing.id) { toast('作品尚未创建，请先保存基础信息后再替换图片。'); return; }
+          imgBusy = true; setRowBusy(true);
+          try {
+            const updated = await repo.replaceWorkImage(meta.id, file);
+            imagesState.length = 0;
+            _metaFromWork(updated).forEach((m) => imagesState.push(m));
+            Object.assign(existing, updated);
+            renderImages();
+            toast('已替换该图片');
+          } catch (err) {
+            toast(`替换失败：${err.message || err}`);
+            setRowBusy(false); imgBusy = false;
+          }
+        },
+        onError: () => {},
+      });
       const delBtn = h('button', { class: 'thumb__del', title: '删除此图片（底层原图将保留备份）' }, '×');
+      ctrls.push(delBtn);
       delBtn.addEventListener('click', async () => {
+        if (imgBusy) return;
         if (!globalThis.confirm('确定删除这张作品图片吗？\n该操作不可撤销，底层原图将保留备份；若已发布到前台，A 端将同步消失。')) return;
+        imgBusy = true; setRowBusy(true);
+        imgDelStatus.textContent = '删除中…';
+        imgDelStatus.className = 'form-status form-status--saving';
         try {
-          imgDelStatus.textContent = '删除中…';
-          imgDelStatus.className = 'form-status form-status--saving';
-          const updated = await repo.removeWorkImage(existing.id, meta.url);
+          // P0-11：以稳定 id 删除，不再用 URL
+          const updated = await repo.removeWorkImage(existing.id, meta.id);
           imagesState.length = 0;
           _metaFromWork(updated).forEach((m) => imagesState.push(m));
-          renderImages();
           Object.assign(existing, updated);
           imgDelStatus.textContent = '删除成功';
           imgDelStatus.className = 'form-status form-status--success';
           toast('已删除该图片');
+          renderImages();
         } catch (err) {
           imgDelStatus.textContent = `删除失败：${err.message || err}`;
           imgDelStatus.className = 'form-status form-status--failure';
           toast(`删除失败：${err.message || err}`);
+          setRowBusy(false); imgBusy = false;
         }
       });
+      const upBtn = h('button', { title: '上移', on: { click: () => move(i, i - 1) } }, '↑');
+      const downBtn = h('button', { title: '下移', on: { click: () => move(i, i + 1) } }, '↓');
+      ctrls.push(upBtn, downBtn);
       imgListWrap.appendChild(h('div', { class: 'thumb' }, [
         src ? imgEl(src, null, `图${i + 1}`) : h('div', { class: 'thumb__fail' }, '图片加载失败'),
-        h('div', { class: 'thumb__move' }, [
-          h('button', { title: '上移', on: { click: () => move(i, i - 1) } }, '↑'),
-          h('button', { title: '下移', on: { click: () => move(i, i + 1) } }, '↓'),
-        ]),
+        h('div', { class: 'thumb__move' }, [upBtn, downBtn]),
+        replaceCtl.el,
         delBtn,
       ]));
     }
@@ -288,13 +329,26 @@ export async function adminWorkEditView(params) {
   let isSaving = false;
   const markDirty = () => {
     if (isSaving) return;
-    if (!isDirty) { isDirty = true; statusBar.textContent = '未保存修改'; statusBar.className = 'form-status form-status--dirty'; }
+    if (!isDirty) {
+      isDirty = true;
+      statusBar.textContent = '未保存修改';
+      statusBar.className = 'form-status form-status--dirty';
+      // P0-7：存在未保存修改时禁用「发布 / 下架」，避免把旧状态发布出去；提示先保存。
+      if (publishBtn) { publishBtn.disabled = true; publishBtn.title = '请先保存修改后再发布'; }
+    }
   };
   const setSaving = (on) => {
     isSaving = on;
     submitBtn.disabled = on;
     submitBtn.textContent = on ? '保存中…' : (isEdit ? '保存修改' : '创建作品');
-    if (on) { statusBar.textContent = '保存中…'; statusBar.className = 'form-status form-status--saving'; }
+    if (on) {
+      statusBar.textContent = '保存中…';
+      statusBar.className = 'form-status form-status--saving';
+    } else if (publishBtn) {
+      // 保存完成：是否禁用发布取决于是否仍有未保存修改
+      publishBtn.disabled = isDirty;
+      publishBtn.title = isDirty ? '请先保存修改后再发布' : '';
+    }
   };
   const setStatus = (kind, msg) => {
     statusBar.textContent = msg;
@@ -317,12 +371,15 @@ export async function adminWorkEditView(params) {
     : null;
   if (publishBtn) {
     publishBtn.addEventListener('click', async () => {
+      if (publishBtn.disabled) return; // P0-28：防双击（操作期间禁用）
+      publishBtn.disabled = true;
       try {
         if (pubState) { await repo.unpublishWork(existing.id); pubState = false; publishBtn.textContent = '发布到前台'; toast('已下架（取消公开）'); }
         else { await repo.publishWork(existing.id); pubState = true; publishBtn.textContent = '下架（取消公开）'; toast('已发布到前台'); }
         const refreshed = await repo.getById(existing.id);
         if (refreshed) Object.assign(existing, refreshed);
       } catch (e) { toast(`操作失败：${e.message || e}`); }
+      finally { publishBtn.disabled = isDirty; publishBtn.title = isDirty ? '请先保存修改后再发布' : ''; }
     });
   }
 
@@ -413,10 +470,10 @@ export async function adminWorkEditView(params) {
     ]),
     h('div', { class: 'field' }, [h('label', { class: 'field__label' }, '排序权重（数字越大越靠前）'), sortI]),
     // —— C2 双维度独立区 ——
-    h('div', { class: 'field' }, [h('label', { class: 'field__label' }, 'Home Featured Order（首页精选排序权重，仅当「是否精选」开启时生效）'), homeFeaturedOrderI]),
+    h('div', { class: 'field' }, [h('label', { class: 'field__label' }, '首页精选排序权重（仅当开启「是否精选」时生效）'), homeFeaturedOrderI]),
     h('div', { class: 'form-grid' }, [
-      h('div', { class: 'field field--row' }, [worksPickSw.el, h('span', {}, 'Works Pick（作品库精选入口）')]),
-      h('div', { class: 'field' }, [h('label', { class: 'field__label' }, 'Works Pick Order（作品库精选排序权重）'), worksPickOrderI]),
+      h('div', { class: 'field field--row' }, [worksPickSw.el, h('span', {}, '作品库精选')]),
+      h('div', { class: 'field' }, [h('label', { class: 'field__label' }, '作品库精选排序权重'), worksPickOrderI]),
     ]),
     h('div', { class: 'field' }, [h('label', { class: 'field__label' }, '展示尺寸（普通 / 竖版大图 / 横版通栏）'), displaySizeSel]),
     // C2 draft 创建开关（仅 Mock 新增时可用）
@@ -458,10 +515,10 @@ function renderReadOnly(w) {
     field('作品性质', w.workNature || '—'),
     field('标签', (w.tags || []).join('、') || '—'),
     field('是否公开', w.public === false ? '否' : '是'),
-    field('Home Featured（首页精选）', w.featured ? '是' : '—'),
-    field('Home Featured Order（首页精选排序权重）', w.homeFeaturedOrder != null && w.homeFeaturedOrder !== 0 ? String(w.homeFeaturedOrder) : '—'),
-    field('Works Pick（作品库精选入口）', w.worksPick ? '是' : '—'),
-    field('Works Pick Order（作品库精选排序权重）', w.worksPickOrder != null && w.worksPickOrder !== 0 ? String(w.worksPickOrder) : '—'),
+    field('首页精选', w.featured ? '是' : '—'),
+    field('首页精选排序权重', w.homeFeaturedOrder != null && w.homeFeaturedOrder !== 0 ? String(w.homeFeaturedOrder) : '—'),
+    field('作品库精选', w.worksPick ? '是' : '—'),
+    field('作品库精选排序权重', w.worksPickOrder != null && w.worksPickOrder !== 0 ? String(w.worksPickOrder) : '—'),
     field('展示尺寸', ({ standard: '普通', 'large-portrait': '竖版大图', 'wide-feature': '横版通栏' })[w.displaySize] || '普通'),
     field('排序权重', String(w.sort || 0)),
     h('div', { class: 'field' }, [h('label', { class: 'field__label' }, '媒体'), media]),

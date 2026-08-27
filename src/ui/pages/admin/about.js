@@ -66,46 +66,87 @@ function textarea(value, placeholder) {
   return { el, get: () => el.value, set: (v) => { el.value = v || ''; } };
 }
 
-// 列表型条目编辑器：每行可改 + 上移/下移/删除；顶部「+ 新增」按钮
-// #9 修复：onReorder/onRemove/onAdd 均带统一状态反馈（saving / success / failure / unauthorized），
-//       不再仅靠 toast。
-// #2 修复：add / remove / reorder 全部经 coordinator（与 blur/Profile/ho7 同一 FIFO 队列），
+// 列表型条目编辑器：每行可改 + 上移/下移/删除；顶部「+ 新增」按钮。
+// #9 修复：onReorder/onRemove 均带统一状态反馈（saving / success / failure / unauthorized），不再仅靠 toast。
+// #2 修复：add / remove / reorder / upsert 全部经 coordinator（与 blur/Profile/ho7 同一 FIFO 队列），
 //       绝不直接访问 repository，保证用户操作顺序 === DB 写入顺序（如 edit A → delete A
 //       必须先 edit 完成再 delete，最终 A 不存在；edit A → reorder 先 edit 再 reorder）。
+// P0-23 修复：点击「新增」只向本地追加一条空白行（DB 0 变化）；
+//   仅当用户在该空白行填写并失焦时，才经 coordinator 真正 INSERT（onAdd 不传 id → repository 生成真实 id）；
+//   若空白行始终未填写即失焦 / 被删除，则仅移除本地行，绝不写入数据库（取消 = DB 0 变化）。
 function makeListEditor(opts) {
-  // opts: { items, renderRow, onReorder, onRemove, onAdd, addLabel, label, coordinator }
+  // opts: { items, renderRow, onReorder, onRemove, onUpsert, onAdd, isEmpty, addLabel, label, coordinator, onAfterAdd }
+  //   renderRow(it, onSave): 渲染行；onSave(values) 由行内失焦调用，携当前字段值。
+  //   onUpsert(payload): 已有行更新（payload 含 id）。
+  //   onAdd(payload): 新行插入（payload 不含 id，repository 生成真实 id）。
+  //   isEmpty(payload): 新行全部字段为空 → 视为放弃，不写入。
   // coordinator: (fn, label) => void —— 统一入队器（来自 renderBody 的 enqueueSave）
   const coordinator = opts.coordinator;
   let items = opts.items.slice();
+  const newIds = new Set(); // 本地新增但尚未 INSERT 的临时 id 集合
   const listEl = h('div', { class: 'editable-list' });
-  // #9 列表级状态条
   const listStatus = h('div', { class: 'form-status form-status--idle', 'aria-live': 'polite' });
   const setListStatus = (kind, msg) => { listStatus.textContent = msg; listStatus.className = `form-status form-status--${kind}`; };
   const refresh = () => {
     listEl.innerHTML = '';
     items.forEach((it, idx) => {
-      const rowControls = opts.renderRow(it, () => {});
+      const isNew = newIds.has(it.id);
+      // 行保存：合并当前行最新字段值 -> 新行 INSERT / 已有行 UPDATE
+      const onSave = (values) => {
+        const payload = { ...it, ...values };
+        if (isNew) {
+          // 空白行：若全部字段为空，视为用户放弃，仅移除本地行（DB 0 变化）
+          if (opts.isEmpty && opts.isEmpty(payload)) {
+            newIds.delete(it.id);
+            const i = items.findIndex((x) => x.id === it.id);
+            if (i >= 0) items.splice(i, 1);
+            setListStatus('idle', '已移除空白新增行（未写入数据库）');
+            refresh();
+            return;
+          }
+          setListStatus('saving', '新增中…');
+          coordinator(async () => {
+            await opts.onAdd(payload);
+            newIds.delete(it.id);
+            // 仅当该行仍存在于本地（未被用户在保存途中删除）才刷新为真实 DB 数据，
+            // 避免「途中被删却因 readAdmin 复活」。
+            if (items.some((x) => x.id === it.id)) {
+              const A = await aboutRepo.readAdmin();
+              if (opts.onAfterAdd) opts.onAfterAdd(A);
+            }
+          }, 'add');
+        } else {
+          setListStatus('saving', '保存中…');
+          coordinator(async () => { await opts.onUpsert(payload); }, 'upsert');
+        }
+      };
+      const rowControls = opts.renderRow(it, onSave);
       const moveUp = h('button', { class: 'icon-btn', title: '上移', on: { click: () => {
         if (idx <= 0) return;
-        const prev = items.slice();
         [items[idx - 1], items[idx]] = [items[idx], items[idx - 1]];
         setListStatus('saving', '排序中…');
-        // 经 coordinator：并发的 edit 若在途，reorder 会排在 edit 之后
         coordinator(() => opts.onReorder(items.map((x) => x.id)), 'reorder-up');
       } } }, '↑');
       const moveDown = h('button', { class: 'icon-btn', title: '下移', on: { click: () => {
         if (idx >= items.length - 1) return;
-        const prev = items.slice();
         [items[idx + 1], items[idx]] = [items[idx], items[idx + 1]];
         setListStatus('saving', '排序中…');
         coordinator(() => opts.onReorder(items.map((x) => x.id)), 'reorder-down');
       } } }, '↓');
       const del = h('button', { class: 'icon-btn icon-btn--danger', title: '删除', on: { click: () => {
         if (!globalThis.confirm(`确定删除该${opts.label || '条目'}吗？此操作不可撤销。`)) return;
+        if (newIds.has(it.id)) {
+          // 本地新增尚未写入 DB：仅移除本地行（DB 0 变化）
+          newIds.delete(it.id);
+          const i = items.findIndex((x) => x.id === it.id);
+          if (i >= 0) items.splice(i, 1);
+          setListStatus('idle', '已取消尚未保存的新增行（未写入数据库）');
+          refresh();
+          return;
+        }
         setListStatus('saving', '删除中…');
-        // 经 coordinator：必须先完成在途的 edit，再执行 remove，最终 A 不存在
         coordinator(async () => {
-          if (it.id) await opts.onRemove(it.id);
+          await opts.onRemove(it.id);
           items.splice(idx, 1);
           refresh();
         }, 'remove');
@@ -118,13 +159,11 @@ function makeListEditor(opts) {
   };
   refresh();
   const addBtn = h('button', { class: 'btn btn--sm', on: { click: () => {
-    setListStatus('saving', '新增中…');
-    // 经 coordinator：与并发的 edit 顺序入队
-    coordinator(async () => {
-      await opts.onAdd();
-      const A = await aboutRepo.readAdmin();
-      if (opts.onAfterAdd) opts.onAfterAdd(A);
-    }, 'add');
+    const tmpId = `new-${Date.now().toString(36)}-${Math.floor(Math.random() * 1e6).toString(36)}`;
+    newIds.add(tmpId);
+    items.push({ id: tmpId });
+    setListStatus('idle', '已新增本地空白行，填写后失焦即保存（未填写则不写入数据库）');
+    refresh();
   } } }, opts.addLabel || '+ 新增');
   return { el: h('div', {}, [listEl, addBtn, listStatus]), refresh, setItems: (ni) => { items = ni.slice(); refresh(); }, getItems: () => items };
 }
@@ -199,9 +238,6 @@ function renderBody(A, isSupabase) {
     }
   };
 
-  // blurSave 统一走 coordinator（不再用 single pendingSave，杜绝静默丢写）
-  const blurSave = (fn) => enqueueSave(fn, 'blur');
-
   // —— profile 区（姓名 / 拼音 / 简介 / 创作方向）——
   const fullNameI = input(A.fullName, '姓名');
   const pinyinI = input(A.pinyin, '拼音');
@@ -223,14 +259,12 @@ function renderBody(A, isSupabase) {
     label: '教育经历',
     addLabel: '+ 新增教育经历',
     coordinator: enqueueSave,
-    renderRow: (e) => {
+    renderRow: (e, onSave) => {
       const yr = input(e.yr, '年份/时段');
       const h1 = input(e.h, '标题/机构');
       const p1 = input(e.p, '详情');
-      // 失焦即 upsert（仅对有 id 的条目）；#6 状态机 + 会话失效跳转
-      const onBlur = async () => {
-        await blurSave(() => aboutRepo.upsertEducation({ id: e.id, yr: yr.get(), h: h1.get(), p: p1.get() }));
-      };
+      // 失焦即保存（P0-23：新行 INSERT / 已有行 UPDATE，均经 coordinator）
+      const onBlur = () => onSave({ yr: yr.get(), h: h1.get(), p: p1.get() });
       [yr, h1, p1].forEach((c) => { c.el.addEventListener('blur', onBlur); c.el.addEventListener('input', markDirty); });
       return h('div', { class: 'editable-row__fields' }, [
         h('div', { class: 'field' }, [h('label', { class: 'field__label' }, '时段'), yr.el]),
@@ -240,7 +274,9 @@ function renderBody(A, isSupabase) {
     },
     onReorder: (ids) => aboutRepo.reorderEducation(ids),
     onRemove: (id) => aboutRepo.removeEducation(id),
-    onAdd: () => aboutRepo.upsertEducation({ yr: '新时段', h: '新机构', p: '' }),
+    onUpsert: (it) => aboutRepo.upsertEducation({ id: it.id, yr: it.yr, h: it.h, p: it.p }),
+    onAdd: (it) => aboutRepo.upsertEducation({ yr: it.yr, h: it.h, p: it.p }),
+    isEmpty: (v) => !String(v.yr || '').trim() && !String(v.h || '').trim() && !String(v.p || '').trim(),
     onAfterAdd: (newA) => { eduEditor.setItems(newA.education.map((e, i) => ({ ...e, id: e.id || `edu-${i}` }))); },
   });
 
@@ -250,13 +286,11 @@ function renderBody(A, isSupabase) {
     label: '经历',
     addLabel: '+ 新增经历',
     coordinator: enqueueSave,
-    renderRow: (e) => {
+    renderRow: (e, onSave) => {
       const yr = input(e.yr, '年份/时段');
       const h1 = input(e.h, '标题');
       const p1 = input(e.p, '详情');
-      const onBlur = async () => {
-        await blurSave(() => aboutRepo.upsertExperience({ id: e.id, yr: yr.get(), h: h1.get(), p: p1.get() }));
-      };
+      const onBlur = () => onSave({ yr: yr.get(), h: h1.get(), p: p1.get() });
       [yr, h1, p1].forEach((c) => { c.el.addEventListener('blur', onBlur); c.el.addEventListener('input', markDirty); });
       return h('div', { class: 'editable-row__fields' }, [
         h('div', { class: 'field' }, [h('label', { class: 'field__label' }, '时段'), yr.el]),
@@ -266,7 +300,9 @@ function renderBody(A, isSupabase) {
     },
     onReorder: (ids) => aboutRepo.reorderExperience(ids),
     onRemove: (id) => aboutRepo.removeExperience(id),
-    onAdd: () => aboutRepo.upsertExperience({ yr: '新时段', h: '新经历', p: '' }),
+    onUpsert: (it) => aboutRepo.upsertExperience({ id: it.id, yr: it.yr, h: it.h, p: it.p }),
+    onAdd: (it) => aboutRepo.upsertExperience({ yr: it.yr, h: it.h, p: it.p }),
+    isEmpty: (v) => !String(v.yr || '').trim() && !String(v.h || '').trim() && !String(v.p || '').trim(),
     onAfterAdd: (newA) => { expEditor.setItems(newA.experience.map((e, i) => ({ ...e, id: e.id || `exp-${i}` }))); },
   });
 
@@ -276,18 +312,18 @@ function renderBody(A, isSupabase) {
     label: '技能',
     addLabel: '+ 新增技能',
     coordinator: enqueueSave,
-    renderRow: (s) => {
+    renderRow: (s, onSave) => {
       const nameI = input(s.name, '技能名称');
-      const onBlur = async () => {
-        await blurSave(() => aboutRepo.upsertSkill(nameI.get(), s.id));
-      };
+      const onBlur = () => onSave({ name: nameI.get() });
       nameI.el.addEventListener('blur', onBlur);
       nameI.el.addEventListener('input', markDirty);
       return h('div', { class: 'field' }, [h('label', { class: 'field__label' }, '技能'), nameI.el]);
     },
     onReorder: (ids) => aboutRepo.reorderSkill(ids),
     onRemove: (id) => aboutRepo.removeSkill(id),
-    onAdd: () => aboutRepo.upsertSkill('新技能'),
+    onUpsert: (it) => aboutRepo.upsertSkill(it.name, it.id),
+    onAdd: (it) => aboutRepo.upsertSkill(it.name),
+    isEmpty: (v) => !String(v.name || '').trim(),
     onAfterAdd: (newA) => { skillEditor.setItems((newA.skills || []).map((s, i) => ({ name: s.name, id: s.id || `sk-${i}` }))); },
   });
 
@@ -297,12 +333,10 @@ function renderBody(A, isSupabase) {
     label: '荣誉',
     addLabel: '+ 新增荣誉',
     coordinator: enqueueSave,
-    renderRow: (a) => {
+    renderRow: (a, onSave) => {
       const yI = input(a.y, '年份');
       const tI = input(a.t, '荣誉名称');
-      const onBlur = async () => {
-        await blurSave(() => aboutRepo.upsertHonor({ id: a.id, y: yI.get(), t: tI.get() }));
-      };
+      const onBlur = () => onSave({ y: yI.get(), t: tI.get() });
       [yI, tI].forEach((c) => { c.el.addEventListener('blur', onBlur); c.el.addEventListener('input', markDirty); });
       return h('div', { class: 'editable-row__fields' }, [
         h('div', { class: 'field' }, [h('label', { class: 'field__label' }, '年份'), yI.el]),
@@ -311,7 +345,9 @@ function renderBody(A, isSupabase) {
     },
     onReorder: (ids) => aboutRepo.reorderHonor(ids),
     onRemove: (id) => aboutRepo.removeHonor(id),
-    onAdd: () => aboutRepo.upsertHonor({ y: '新年份', t: '新荣誉' }),
+    onUpsert: (it) => aboutRepo.upsertHonor({ id: it.id, y: it.y, t: it.t }),
+    onAdd: (it) => aboutRepo.upsertHonor({ y: it.y, t: it.t }),
+    isEmpty: (v) => !String(v.y || '').trim() && !String(v.t || '').trim(),
     onAfterAdd: (newA) => { honorEditor.setItems(newA.honors.map((a, i) => ({ ...a, id: a.id || `ho-${i}` }))); },
   });
 
@@ -321,12 +357,10 @@ function renderBody(A, isSupabase) {
     label: '联系方式',
     addLabel: '+ 新增联系方式',
     coordinator: enqueueSave,
-    renderRow: (c) => {
+    renderRow: (c, onSave) => {
       const kI = input(c.k, '标签');
       const vI = input(c.v, '链接');
-      const onBlur = async () => {
-        await blurSave(() => aboutRepo.upsertContact(kI.get(), vI.get(), c.id));
-      };
+      const onBlur = () => onSave({ k: kI.get(), v: vI.get() });
       [kI, vI].forEach((cc) => { cc.el.addEventListener('blur', onBlur); cc.el.addEventListener('input', markDirty); });
       return h('div', { class: 'editable-row__fields' }, [
         h('div', { class: 'field' }, [h('label', { class: 'field__label' }, '标签'), kI.el]),
@@ -335,7 +369,9 @@ function renderBody(A, isSupabase) {
     },
     onReorder: (ids) => aboutRepo.reorderContact(ids),
     onRemove: (id) => aboutRepo.removeContact(id),
-    onAdd: () => aboutRepo.upsertContact('新标签', ''),
+    onUpsert: (it) => aboutRepo.upsertContact(it.k, it.v, it.id),
+    onAdd: (it) => aboutRepo.upsertContact(it.k, it.v),
+    isEmpty: (v) => !String(v.k || '').trim() && !String(v.v || '').trim(),
     onAfterAdd: (newA) => { contactEditor.setItems((newA.contacts || []).map((c, i) => ({ ...c, id: c.id || `ct-${i}` }))); },
   });
 

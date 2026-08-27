@@ -21,7 +21,9 @@ export class WorkRepository {
   async resetDemo() { throw new Error('not implemented'); }
   async uploadWorkCover(/* workId, file */) { throw new Error('not implemented'); }
   async addWorkImage(/* workId, file */) { throw new Error('not implemented'); }
-  async adjustImageSort(/* workId, orderedIds */) { throw new Error('not implemented'); }
+  async removeWorkImage(/* workId, imageId */) { throw new Error('not implemented'); }
+  async adjustImageSort(/* workId, orderedImageIds */) { throw new Error('not implemented'); }
+  async replaceWorkImage(/* imageId, file */) { throw new Error('not implemented'); }
   async replaceComicPageImage(/* pageId, file */) { throw new Error('not implemented'); }
   async replaceCertificateImage(/* certId, file */) { throw new Error('not implemented'); }
 }
@@ -272,16 +274,25 @@ export class MockWorkRepository extends WorkRepository {
     return this._clone(w);
   }
 
-  async removeWorkImage(workId, url) {
+  async removeWorkImage(workId, imageId) {
     this._guardWrite();
-    const w = this._works.find((x) => x.id === workId);
-    if (!w) throw new Error('作品不存在');
-    if (!Array.isArray(w.images)) throw new Error('该作品无图片');
-    const before = w.images.length;
-    w.images = w.images.filter((u) => u !== url);
-    if (w.images.length === before) throw new Error('未找到匹配的作品图片');
+    // P0-11：以稳定 imageId（`workId__index`）为身份删除，不再用 URL 匹配。
+    const found = this._findImageById(imageId);
+    if (!found || found.w.id !== workId) throw new Error('未找到匹配的作品图片（ID 无匹配）');
+    found.w.images.splice(found.idx, 1);
     this._save();
-    return this._clone(w);
+    return this._clone(found.w);
+  }
+
+  async replaceWorkImage(imageId, file) {
+    this._guardWrite();
+    // P0-11 / P0-12：原位替换——仅改该位置图片内容，保留位置（不重排、不增删）。
+    const found = this._findImageById(imageId);
+    if (!found) throw new Error('作品图片不存在');
+    const r = await this._mockUpload(file);
+    found.w.images[found.idx] = r.url;
+    this._save();
+    return this._clone(found.w);
   }
 
   async reorderComicPages(comicId, orderedIds) {
@@ -384,21 +395,19 @@ export class MockWorkRepository extends WorkRepository {
     return this._clone(w);
   }
 
-  async adjustImageSort(workId, orderedIds) {
+  async adjustImageSort(workId, orderedImageIds) {
     this._guardWrite();
+    // P0-11：以稳定 imageId 数组为顺序（不再用 URL 数组）。
     const w = this._works.find((x) => x.id === workId);
     if (!w) throw new Error('作品不存在');
     if (!Array.isArray(w.images)) throw new Error('该作品无图片');
-    if (orderedIds.length !== w.images.length) throw new Error('顺序长度与现有图片数不一致');
-    // Mock 以数组顺序即展示顺序：按 orderedIds 索引重排（orderedIds 为「原图 URL 的新顺序索引」或「按 URL 标识」
-    // 简化：orderedIds 为图片 URL 的目标顺序（与 Supabase 按 id 不同，Mock 用 URL 直接映射）。
-    const byUrl = new Map(w.images.map((u, i) => [u, i]));
-    const reordered = orderedIds.map((u) => {
-      const idx = byUrl.get(u);
-      if (idx == null) throw new Error(`作品图片重排失败：存在未知图片（${u}）`);
-      return w.images[idx];
+    if (orderedImageIds.length !== w.images.length) throw new Error('顺序长度与现有图片数不一致');
+    const idxs = orderedImageIds.map((id) => {
+      const f = this._findImageById(id);
+      if (!f || f.w.id !== workId) throw new Error(`作品图片重排失败：存在未知图片（${id}）`);
+      return f.idx;
     });
-    w.images = reordered;
+    w.images = idxs.map((i) => w.images[i]);
     this._save();
     return this._clone(w);
   }
@@ -459,5 +468,30 @@ export class MockWorkRepository extends WorkRepository {
     };
   }
 
-  _clone(v) { return JSON.parse(JSON.stringify(v)); }
+  // 为作品图片附加稳定身份 imagesMeta（Mock 回滚通道无真实 work_images.id，
+  // 故以 `workId__index` 作为稳定 id，满足 P0-11「图片身份绝不再用 URL」契约；
+  // 真实 Supabase 实现返回真实 work_images.id）。
+  _attachMeta(w) {
+    if (w && Array.isArray(w.images)) {
+      w.imagesMeta = w.images.map((u, i) => ({ id: `${w.id}__${i}`, assetId: null, sortOrder: i, url: u, bucket: null, path: null }));
+    }
+    return w;
+  }
+  _clone(v) {
+    const raw = JSON.parse(JSON.stringify(v));
+    if (Array.isArray(raw)) return raw.map((w) => this._attachMeta(w));
+    return this._attachMeta(raw);
+  }
+
+  // 按稳定 imageId（`workId__index`）定位作品图片（Mock 专用）。
+  _findImageById(imageId) {
+    const m = /^(.+)__(\d+)$/.exec(String(imageId));
+    if (!m) return null;
+    const workId = m[1];
+    const i = Number(m[2]);
+    const w = this._works.find((x) => x.id === workId);
+    if (!w || !Array.isArray(w.images)) return null;
+    if (i < 0 || i >= w.images.length) return null;
+    return { w, idx: i };
+  }
 }

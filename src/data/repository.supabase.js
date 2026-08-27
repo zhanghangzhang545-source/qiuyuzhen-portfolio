@@ -64,6 +64,56 @@ export class SupabaseWorkRepository extends WorkRepository {
   }
 
   /**
+   * 提取 RPC 真实错误（P0-2：绝不把真错误吞成 unknown / 不静默回 Mock）。
+   * Supabase rpc 错误结构：{ code, message, details, hint }；尽力附加以便管理员定位。
+   * @returns {string} 中文前缀 + 服务端原始错误（UI 仅作提示，管理员据此排查）。
+   */
+  _rpcFail(rpcResult, fallbackMsg) {
+    const e = rpcResult && rpcResult.error;
+    if (e) {
+      const parts = [];
+      if (e.message) parts.push(e.message);
+      if (e.details) parts.push(`详情：${e.details}`);
+      if (e.hint) parts.push(`提示：${e.hint}`);
+      if (e.code) parts.push(`(code: ${e.code})`);
+      const msg = parts.join('；').trim();
+      return msg || fallbackMsg;
+    }
+    return fallbackMsg;
+  }
+
+  /**
+   * 管理员判定（P0-2：优先处理 rpc.error 真实错误，绝不把「权限校验失败」吞成「非管理员」）。
+   * @throws 非管理员 / 会话失效 / 真实 RPC 错误
+   * @returns {object} Supabase 客户端
+   */
+  async _requireAdmin() {
+    const sb = await this._client();
+    const chk = await sb.rpc('is_admin');
+    if (chk.error) throw new Error(`权限校验失败：${this._rpcFail(chk, '未知权限错误')}`);
+    if (!chk.data) throw new Error('非管理员，无操作权限（会话可能已失效，请重新登录）');
+    return sb;
+  }
+
+  /**
+   * 查询父记录当前公开状态（P0-6 / P0-21 核心）：
+   * 已公开作品的媒体编辑必须继承「公开」意图（新图也发布，避免 A 端断图）；
+   * 隐藏（草稿 / 未公开）作品的媒体编辑必须继承「隐藏」意图（保持 private，且不改变原公开意图）。
+   * @param {'work'|'certificate'} parentType
+   * @param {string} parentId
+   * @returns {Promise<boolean>}
+   */
+  async _parentIsPublic(parentType, parentId) {
+    const sb = await this._client();
+    if (parentType === 'certificate') {
+      const { data } = await sb.from('certificates').select('is_public').eq('id', parentId).maybeSingle();
+      return !!(data && data.is_public);
+    }
+    const { data } = await sb.from('works').select('is_public').eq('id', parentId).maybeSingle();
+    return !!(data && data.is_public);
+  }
+
+  /**
    * C1/C2 模式分流守卫（C2 边界纪律）：
    * - C1（未注入客户端且未配置真实 Supabase）：写操作一律抛「C1 只读」错误（冻结语义）。
    * - C2（已注入测试客户端，或真实环境已配置 SUPABASE_URL/KEY）：返回可写客户端。
@@ -223,6 +273,9 @@ export class SupabaseWorkRepository extends WorkRepository {
         const imgs = ir.map((m) => {
           const media = mediaMap.get(m.media_asset_id);
           return {
+            id: m.id, // 稳定身份（work_images.id），P0-11：图片身份绝不再用 URL
+            assetId: m.media_asset_id || null,
+            sortOrder: m.sort_order || 0,
             url: this._assetDisplayUrl(media),
             bucket: media?.bucket || null,
             path: media?.originalPath || null,
@@ -254,6 +307,10 @@ export class SupabaseWorkRepository extends WorkRepository {
         title: c.title,
         intro: '',
         year: c.year == null ? null : c.year,
+        // P0-20：证书结构化字段完整映射（year_start/year_end/category → yearStart/yearEnd/category）
+        yearStart: c.year_start == null ? null : c.year_start,
+        yearEnd: c.year_end == null ? null : c.year_end,
+        category: c.category || '',
         stage: '',
         tags: ['证书'],
         date: '',
@@ -680,9 +737,7 @@ export class SupabaseWorkRepository extends WorkRepository {
   // 发布单个资产：真实 Storage 拷贝（private→public）+ 校验 + publish_asset canonical flip。
   // 任一环节失败 → 回滚本尝试的 public 拷贝，抛错（DB canonical 不被翻转）。
   async _publishAsset(assetId, parentType, parentId) {
-    const sb = await this._client();
-    const isAdmin = await sb.rpc('is_admin');
-    if (!isAdmin.data) throw new Error('非管理员，无发布权限');
+    const sb = await this._requireAdmin();
     const { data: a, error: ae } = await sb.from('media_assets').select('original_path, bucket').eq('id', assetId).maybeSingle();
     if (ae) throw new Error(`读取资产失败：${ae.message}`);
     if (!a) throw new Error('发布资产失败：资产不存在');
@@ -695,6 +750,7 @@ export class SupabaseWorkRepository extends WorkRepository {
     }
     try {
       const pub = await sb.rpc('publish_asset', { p_asset_id: assetId, p_parent_type: parentType, p_parent_id: parentId });
+      if (pub.error) throw new Error(`发布资产失败（服务端）：${this._rpcFail(pub, 'unknown')}`);
       if (!pub.data || pub.data.ok !== true) throw new Error(`发布资产失败：${(pub.data && pub.data.error) || 'unknown'}`);
     } catch (e) {
       if (publicPathCreated) { try { await this._deletePublicStorage(path); } catch (_) { /* 回滚尽力而为 */ } }
@@ -715,10 +771,8 @@ export class SupabaseWorkRepository extends WorkRepository {
   async _uploadAndLink(file, { parentType, parentId, linkFn, autoPublish = false }) {
     this._validateUploadFile(file);
     const sb = await this._requireWritableClient();
-    // 管理员判定（真实 Supabase 由 Storage RLS + publish_asset 内部 is_admin 双重守卫；
-    // 此处显式前置判定，便于在上传前即拒绝非管理员/会话失效）。
-    const adminChk = await sb.rpc('is_admin');
-    if (!adminChk.data) throw new Error('非管理员，无上传 / 媒体写入权限（会话失效或未授权）');
+    // 管理员判定（P0-2：优先处理 rpc.error 真实错误，不把权限失败吞成未知）。
+    await this._requireAdmin();
 
     const format = this._formatFromMime(file.type);
     const safeName = String(file.name || 'file').replace(/[^\w.\-]+/g, '_');
@@ -758,8 +812,10 @@ export class SupabaseWorkRepository extends WorkRepository {
   /** C3：上传并替换作品封面（repaint works.cover_asset_id；旧资产 + Storage 文件保留） */
   async uploadWorkCover(workId, file) {
     const sb = await this._requireWritableClient();
+    // P0-6：若作品已公开，新封面也一并发布（避免 A 端断图）；草稿则保持 private。
+    const autoPublish = await this._parentIsPublic('work', workId);
     const res = await this._uploadAndLink(file, {
-      parentType: 'work', parentId: workId,
+      parentType: 'work', parentId: workId, autoPublish,
       linkFn: async (assetId) => {
         const { error } = await sb.from('works').update({ cover_asset_id: assetId }).eq('id', workId);
         if (error) throw new Error(`作品封面关联失败：${error.message}`);
@@ -771,8 +827,10 @@ export class SupabaseWorkRepository extends WorkRepository {
   /** C3：新增作品多图（追加到 work_images，sort_order = 当前最大 + 1） */
   async addWorkImage(workId, file) {
     const sb = await this._requireWritableClient();
+    // P0-6：继承作品公开意图。
+    const autoPublish = await this._parentIsPublic('work', workId);
     const res = await this._uploadAndLink(file, {
-      parentType: 'work', parentId: workId,
+      parentType: 'work', parentId: workId, autoPublish,
       linkFn: async (assetId) => {
         const { data: imgs, error: qe } = await sb.from('work_images').select('sort_order').eq('work_id', workId);
         if (qe) throw new Error(`作品图片读取失败：${qe.message}`);
@@ -788,29 +846,27 @@ export class SupabaseWorkRepository extends WorkRepository {
   }
 
   /** C3：调整作品多图顺序（单次批量 upsert，原子；无半成功）。@param orderedSrcs 目标顺序的公开 URL 数组（与 Work.images 对齐） */
-  async adjustImageSort(workId, orderedSrcs) {
+  async adjustImageSort(workId, orderedImageIds) {
     const sb = await this._requireWritableClient();
-    // 读取当前 work_images + 关联媒体，构建 公开URL → work_images.id 映射
+    // P0-11：以稳定 work_images.id 为身份（不再用 URL 匹配）。
+    // P0-15：upsert 保留完整字段（id / work_id / media_asset_id / alt_text / sort_order），
+    //        仅 sort_order 改变，绝不丢字段、绝不影响其它图。
     const { data: rows, error: rerr } = await sb
       .from('work_images')
-      .select('id, sort_order, media_asset_id')
+      .select('id, sort_order, media_asset_id, alt_text')
       .eq('work_id', workId);
     if (rerr) throw new Error(`作品图片读取失败：${rerr.message}`);
-    const assetIds = (rows || []).map((r) => r.media_asset_id).filter(Boolean);
-    const mediaMap = await this._resolveMedia(assetIds);
-    const urlToId = new Map();
-    for (const r of (rows || [])) {
-      const url = this._assetDisplayUrl(mediaMap.get(r.media_asset_id));
-      if (url) urlToId.set(url, r.id);
-    }
-    const orderedIds = [];
-    for (const src of orderedSrcs) {
-      const id = urlToId.get(src);
-      if (!id) throw new Error('作品图片重排失败：存在未知图片（URL 无匹配）');
-      orderedIds.push(id);
-    }
-    if (orderedIds.length !== (rows || []).length) throw new Error('作品图片重排失败：顺序长度与现有图片数不一致');
-    const batch = orderedIds.map((id, i) => ({ id, work_id: workId, sort_order: i + 1 }));
+    const byId = new Map((rows || []).map((r) => [r.id, r]));
+    const missing = orderedImageIds.filter((id) => !byId.has(id));
+    if (missing.length) throw new Error(`作品图片重排失败：存在未知图片 ID（${missing.join(', ')}）`);
+    if (orderedImageIds.length !== byId.size) throw new Error('作品图片重排失败：顺序长度与现有图片数不一致');
+    const batch = orderedImageIds.map((id, i) => ({
+      id,
+      work_id: workId,
+      media_asset_id: byId.get(id).media_asset_id,
+      alt_text: byId.get(id).alt_text,
+      sort_order: i + 1,
+    }));
     const { error } = await sb.from('work_images').upsert(batch);
     if (error) throw new Error(`作品图片重排失败：${error.message}`);
     return this.getById(workId);
@@ -823,8 +879,10 @@ export class SupabaseWorkRepository extends WorkRepository {
    */
   async addComicPage(comicId, file) {
     const sb = await this._requireWritableClient();
+    // P0-6：继承漫画公开意图（已发布漫画新增页也发布，避免阅读器断图）。
+    const autoPublish = await this._parentIsPublic('work', comicId);
     const res = await this._uploadAndLink(file, {
-      parentType: 'work', parentId: comicId,
+      parentType: 'work', parentId: comicId, autoPublish,
       linkFn: async (assetId) => {
         const { data: pages, error: qe } = await sb.from('comic_pages').select('page_number').eq('work_id', comicId);
         if (qe) throw new Error(`漫画页读取失败：${qe.message}`);
@@ -848,8 +906,10 @@ export class SupabaseWorkRepository extends WorkRepository {
     if (qe) throw new Error(`漫画页读取失败：${qe.message}`);
     if (!pageRow) throw new Error('漫画页不存在');
     const comicId = pageRow.work_id;
+    // P0-6：继承漫画公开意图（已发布漫画替换页也发布，避免阅读器断图）。
+    const autoPublish = await this._parentIsPublic('work', comicId);
     const res = await this._uploadAndLink(file, {
-      parentType: 'work', parentId: comicId,
+      parentType: 'work', parentId: comicId, autoPublish,
       linkFn: async (assetId) => {
         const { error } = await sb.from('comic_pages').update({ media_asset_id: assetId }).eq('id', pageId);
         if (error) throw new Error(`漫画页图片替换失败：${error.message}`);
@@ -858,11 +918,40 @@ export class SupabaseWorkRepository extends WorkRepository {
     return this.getById(comicId);
   }
 
-  /** C3：替换证书图片（repaint certificates.media_asset_id；旧资产 + Storage 文件保留，不物理删除；不改动结构化字段）。证书维持「替换即发布」语义（autoPublish），但补齐真实 Storage 拷贝（item 1）。 */
+  /**
+   * C3：替换单张作品多图（repaint work_images.media_asset_id；旧资产 + Storage 文件保留，不物理删除）。
+   * 原位替换：保留 work_images.id 与 sort_order，仅改 media_asset_id（P0-12/13/14 位置稳定）。
+   * 继承作品公开意图（P0-6 / P0-21）：已公开作品替换也发布新图，草稿保持 private。
+   * @param {string} imageId work_images.id（稳定身份，非 URL；P0-11）
+   * @param {File} file
+   */
+  async replaceWorkImage(imageId, file) {
+    const sb = await this._requireWritableClient();
+    // 先读该图所属 work_id 与当前公开状态
+    const { data: row, error: qe } = await sb.from('work_images').select('id, work_id').eq('id', imageId).maybeSingle();
+    if (qe) throw new Error(`作品图片读取失败：${qe.message}`);
+    if (!row) throw new Error('作品图片不存在');
+    const workId = row.work_id;
+    const autoPublish = await this._parentIsPublic('work', workId);
+    const res = await this._uploadAndLink(file, {
+      parentType: 'work', parentId: workId, autoPublish,
+      linkFn: async (assetId) => {
+        // 仅改 media_asset_id，保留 id / sort_order（原位替换，不动其它图顺序）
+        const { error } = await sb.from('work_images').update({ media_asset_id: assetId }).eq('id', imageId);
+        if (error) throw new Error(`作品图片替换失败：${error.message}`);
+      },
+    });
+    return this.getById(workId);
+  }
+
+  /** C3：替换证书图片（repaint certificates.media_asset_id；旧资产 + Storage 文件保留，不物理删除；不改动结构化字段）。
+   *  P0-21 修正：证书维持「替换即发布」语义，但必须继承证书原公开意图——已公开证书替换才发布；
+   *  隐藏证书（is_public=false）替换后绝不自行公开（autoPublish = 证书当前 is_public）。 */
   async replaceCertificateImage(certId, file) {
     const sb = await this._requireWritableClient();
+    const autoPublish = await this._parentIsPublic('certificate', certId);
     const res = await this._uploadAndLink(file, {
-      parentType: 'certificate', parentId: certId, autoPublish: true,
+      parentType: 'certificate', parentId: certId, autoPublish,
       linkFn: async (assetId) => {
         const { error } = await sb.from('certificates').update({ media_asset_id: assetId }).eq('id', certId);
         if (error) throw new Error(`证书图片替换失败：${error.message}`);
@@ -891,9 +980,18 @@ export class SupabaseWorkRepository extends WorkRepository {
 
   /** 发布作品：将其全部 private 媒体拷贝到 public + 翻 canonical + works.is_public=true。任一失败回滚本尝试的 public 拷贝。 */
   async publishWork(workId) {
-    const sb = await this._requireWritableClient();
-    const adminChk = await sb.rpc('is_admin');
-    if (!adminChk.data) throw new Error('非管理员，无发布权限');
+    await this._requireAdmin();
+    const sb = await this._client();
+    // P0-8：发布完整性检查（插画/油画至少有效封面；漫画至少封面 + 1 页，避免发布半成品导致 A 端断图/空专题）。
+    const { data: wrow, error: we } = await sb.from('works').select('id, type, cover_asset_id').eq('id', workId).maybeSingle();
+    if (we) throw new Error(`works 读取失败：${we.message}`);
+    if (!wrow) throw new Error('发布失败：作品不存在');
+    if (!wrow.cover_asset_id) throw new Error('发布失败：作品缺少封面图，请先上传封面再发布');
+    if (wrow.type === 'comic') {
+      const { data: pages, error: pe } = await sb.from('comic_pages').select('id').eq('work_id', workId).limit(1);
+      if (pe) throw new Error(`漫画页读取失败：${pe.message}`);
+      if (!pages || pages.length === 0) throw new Error('发布失败：漫画至少需要 1 页，请先添加漫画页再发布');
+    }
     const privateAssets = await this._gatherWorkAssets(workId, PRIVATE_BUCKET);
     const publishedPublicPaths = [];
     try {
@@ -901,6 +999,7 @@ export class SupabaseWorkRepository extends WorkRepository {
         await this._copyStoragePrivateToPublic(a.original_path);
         publishedPublicPaths.push(a.original_path);
         const pub = await sb.rpc('publish_asset', { p_asset_id: a.id, p_parent_type: 'work', p_parent_id: workId });
+        if (pub.error) throw new Error(`发布资产失败（服务端）：${this._rpcFail(pub, 'unknown')}`);
         if (!pub.data || pub.data.ok !== true) throw new Error(`发布资产失败：${(pub.data && pub.data.error) || 'unknown'}`);
       }
       // 显式确保 works.is_public=true（最后一个资产的 publish_asset 已置位，再次确认稳妥）
@@ -916,12 +1015,12 @@ export class SupabaseWorkRepository extends WorkRepository {
 
   /** 下架作品：翻 works.is_public=false；逐个 unpublish_asset（bucket→private）并清理 public 拷贝（private 源保留，可重新发布）。destructive delete 仍禁用。 */
   async unpublishWork(workId) {
-    const sb = await this._requireWritableClient();
-    const adminChk = await sb.rpc('is_admin');
-    if (!adminChk.data) throw new Error('非管理员，无下架权限');
+    await this._requireAdmin();
+    const sb = await this._client();
     const publicAssets = await this._gatherWorkAssets(workId, PUBLIC_BUCKET);
     for (const a of publicAssets) {
       const un = await sb.rpc('unpublish_asset', { p_asset_id: a.id, p_parent_type: 'work', p_parent_id: workId });
+      if (un.error) throw new Error(`下架资产失败（服务端）：${this._rpcFail(un, 'unknown')}`);
       if (!un.data || un.data.ok !== true) throw new Error(`下架资产失败：${(un.data && un.data.error) || 'unknown'}`);
       // 清理 public 拷贝（保留 private 源，可重新发布）；destructive delete 仍禁用
       try { await this._deletePublicStorage(a.original_path); } catch (_) { /* 尽力而为 */ }
@@ -939,15 +1038,15 @@ export class SupabaseWorkRepository extends WorkRepository {
 
   async remove(id) {
     const sb = await this._requireWritableClient();
-    const adminChk = await sb.rpc('is_admin');
-    if (!adminChk.data) throw new Error('非管理员，无删除权限');
+    await this._requireAdmin();
     // 先查 works
     const { data: wrow, error: we } = await sb.from('works').select('id, type, is_public').eq('id', id).maybeSingle();
     if (we) throw new Error(`works 读取失败：${we.message}`);
     if (wrow) {
-      // 若已公开，先安全下架（清理 public 拷贝、private 源保留），避免公开端残留。
+      // P0-4：若已公开，必须先安全下架；下架失败则 ABORT（绝不吞错后继续删除，
+      // 否则公开端会残留孤儿引用 / 断图 / 仍可访问的不一致状态）。
       if (wrow.is_public) {
-        try { await this.unpublishWork(id); } catch (e) { console.error('[remove] unpublish before delete failed', e); }
+        await this.unpublishWork(id);
       }
       // 删关联行（work_images / comic_pages），再删 works 主记录。
       const { error: de1 } = await sb.from('work_images').delete().eq('work_id', id);
@@ -971,8 +1070,7 @@ export class SupabaseWorkRepository extends WorkRepository {
 
   async removeComicPage(comicId, pageId) {
     const sb = await this._requireWritableClient();
-    const adminChk = await sb.rpc('is_admin');
-    if (!adminChk.data) throw new Error('非管理员，无删除权限');
+    await this._requireAdmin();
     // 删 comic_pages 行（底层 Storage 文件保留备份，不物理销毁）。
     const { error: de } = await sb.from('comic_pages').delete().eq('id', pageId).eq('work_id', comicId);
     if (de) throw new Error(`漫画页删除失败：${de.message}`);
@@ -987,25 +1085,17 @@ export class SupabaseWorkRepository extends WorkRepository {
     return this.getById(comicId);
   }
 
-  async removeWorkImage(workId, url) {
+  async removeWorkImage(workId, imageId) {
     const sb = await this._requireWritableClient();
-    const adminChk = await sb.rpc('is_admin');
-    if (!adminChk.data) throw new Error('非管理员，无删除权限');
-    const { data: rows, error: rerr } = await sb.from('work_images').select('id, media_asset_id').eq('work_id', workId);
-    if (rerr) throw new Error(`作品图片读取失败：${rerr.message}`);
-    const assetIds = (rows || []).map((r) => r.media_asset_id).filter(Boolean);
-    const mediaMap = await this._resolveMedia(assetIds);
-    const urlToId = new Map();
-    for (const r of (rows || [])) {
-      const u = this._assetDisplayUrl(mediaMap.get(r.media_asset_id));
-      if (u) urlToId.set(u, r.id);
-    }
-    const rowId = urlToId.get(url);
-    if (!rowId) throw new Error('未找到匹配的作品图片（URL 无匹配）');
+    await this._requireAdmin();
+    // P0-11：以稳定 work_images.id 为身份删除（不再用 URL 匹配）。
+    const { data: row, error: qe } = await sb.from('work_images').select('id').eq('id', imageId).eq('work_id', workId).maybeSingle();
+    if (qe) throw new Error(`作品图片读取失败：${qe.message}`);
+    if (!row) throw new Error('未找到匹配的作品图片（ID 无匹配）');
     // 删 work_images 关联行（底层 Storage 文件保留备份，不物理销毁）。
-    const { error: de } = await sb.from('work_images').delete().eq('id', rowId);
+    const { error: de } = await sb.from('work_images').delete().eq('id', imageId);
     if (de) throw new Error(`作品图片删除失败：${de.message}`);
-    // 剩余图 sort_order 连续重排。
+    // 剩余图 sort_order 连续重排（P0-16：删除 + 重排两步，见说明——跨表原子需 RPC，此处尽力一致）。
     const { data: rem, error: rerr2 } = await sb.from('work_images').select('id, sort_order').eq('work_id', workId).order('sort_order', { ascending: true });
     if (rerr2) throw new Error(`作品图片重排读取失败：${rerr2.message}`);
     const batch = (rem || []).map((r, i) => ({ id: r.id, work_id: workId, sort_order: i + 1 }));

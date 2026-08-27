@@ -11,6 +11,7 @@
 import { h } from '../../../core/dom.js';
 import { repo, auth, DATA_MODE } from '../../../data/services.js';
 import { imgEl } from '../../components/media.js';
+import { adminPreviewSrc } from '../../components/mediaUpload.js';
 import { catTag, toast } from '../../components/primitives.js';
 import { adminLayout } from './layout.js';
 
@@ -94,9 +95,6 @@ function renderBody(works, s, isSupabase, onTogglePublish) {
           w.public !== false
             ? h('button', { class: 'icon-btn', title: '下架（取消公开，前台不可见）', on: { click: () => onTogglePublish(w, 'unpublish') } }, '下架')
             : h('button', { class: 'icon-btn', title: '发布（确认公开到前台）', on: { click: () => onTogglePublish(w, 'publish') } }, '发布'),
-          h('button', {
-            class: 'icon-btn icon-btn--danger', title: '为避免误删，媒体删除暂不开放', disabled: true,
-          }, '🗑'),
         ])
       : h('div', { class: 'table__actions' }, [
           w.type !== 'certificate' ? h('a', { class: 'icon-btn', href: `#/admin/work/${w.id}/edit`, title: '编辑' }, '✎') : null,
@@ -106,8 +104,18 @@ function renderBody(works, s, isSupabase, onTogglePublish) {
             on: { click: () => toast('本地预览模式：删除入口仅在本地演示可用') },
           }, '🗑'),
         ]);
+    // 行封面：private 草稿媒体必须经 signed URL 预览（P0-10，全站一致），public 资产直接读公开 URL。
+    const coverTd = h('td', {});
+    if (w.cover) {
+      adminPreviewSrc(w.cover, w.coverBucket || null, w.coverPath || null).then((src) => {
+        if (src) coverTd.replaceChildren(imgEl(src, 'row-cover'));
+        else coverTd.replaceChildren(h('span', { class: 'secondary' }, '—'));
+      });
+    } else {
+      coverTd.replaceChildren(h('span', { class: 'secondary' }, '—'));
+    }
     return h('tr', {}, [
-      h('td', {}, imgEl(w.cover, 'row-cover')),
+      coverTd,
       h('td', {}, w.title),
       h('td', {}, catTag(w.type)),
       h('td', {}, (w.year != null && w.year !== '') ? String(w.year) : '—'),
@@ -128,16 +136,17 @@ function renderBody(works, s, isSupabase, onTogglePublish) {
   const head = h('div', { class: 'admin__head' }, [
     h('h1', {}, '仪表盘'),
     h('div', { class: 'spacer' }),
+    h('a', { class: 'btn btn--primary', href: '#/admin/work/new' }, '新增作品'),
     isSupabase
       ? h('span', { class: 'badge badge--live' }, '已连接云端')
-      : h('a', { class: 'btn btn--primary', href: '#/admin/work/new' }, '新增作品'),
+      : null,
   ]);
 
   const children = [head, stats];
   if (!isSupabase) {
     children.push(h('div', { style: { marginBottom: '16px' } }, h('button', { class: 'btn btn--sm' }, '重置为 Demo 数据（Mock）')));
   } else {
-    children.push(h('div', { class: 'notice' }, '已开放媒体写入与发布生命周期：作品字段 / 漫画页 / 证书 / 关于页皆可真实写入；上传媒体后作品保持草稿，须显式「发布」才公开到前台，可「下架」取消公开（可重新发布）。媒体物理删除暂不开放。'));
+    children.push(h('div', { class: 'notice' }, '作品支持：编辑字段、上传 / 替换 / 排序 / 删除封面与图片、管理漫画页、编辑证书与关于页；上传媒体后作品保持草稿，须显式「发布」才公开到前台，可「下架」取消公开。删除为逻辑删除，底层原图保留备份。'));
   }
   children.push(table);
   return h('div', {}, children);
