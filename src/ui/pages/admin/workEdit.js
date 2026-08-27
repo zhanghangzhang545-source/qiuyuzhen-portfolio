@@ -8,7 +8,7 @@ import { imgEl } from '../../components/media.js';
 import { toast } from '../../components/primitives.js';
 import { adminLayout } from './layout.js';
 import { WORK_TYPES, STAGES } from '../../../data/types.js';
-import { mediaUploadControl } from '../../components/mediaUpload.js';
+import { mediaUploadControl, adminPreviewSrc } from '../../components/mediaUpload.js';
 
 function switchEl(checked, onChange) {
   const input = h('input', { type: 'checkbox', checked: !!checked });
@@ -71,9 +71,15 @@ export async function adminWorkEditView(params) {
 
   // 封面预览两种模式都展示（只读展示 existing 封面，不可在 SBS 改）
   const cover = { value: existing?.cover || null };
+  const coverMeta = { bucket: existing?.coverBucket || null, path: existing?.coverPath || null };
   const coverPrev = h('div', { class: 'thumb', style: { width: '120px' } });
-  const renderCover = () => { coverPrev.innerHTML = ''; if (cover.value) coverPrev.appendChild(imgEl(cover.value, null, '封面')); };
-  renderCover();
+  // 后台预览：private 草稿媒体用 signed URL，public 资产直接用公开 URL（F5 / 退出重登后仍能正常显示）。
+  async function renderCover() {
+    coverPrev.innerHTML = '';
+    const src = await adminPreviewSrc(cover.value, coverMeta.bucket, coverMeta.path);
+    if (src) coverPrev.appendChild(imgEl(src, null, '封面'));
+  }
+  if (cover.value) renderCover();
 
   // C3：封面上传控件（替换封面）。上传走 services.storage + repo.uploadWorkCover（含管理闸门 + 回滚）。
   const coverUpload = mediaUploadControl({
@@ -88,20 +94,26 @@ export async function adminWorkEditView(params) {
       try {
         const updated = await repo.uploadWorkCover(existing.id, file);
         cover.value = updated.cover;
-        renderCover();
+        if (updated.coverBucket) coverMeta.bucket = updated.coverBucket;
+        if (updated.coverPath) coverMeta.path = updated.coverPath;
         Object.assign(existing, updated);
-        // 草稿封面为 private URL，前台不可预览；用本地对象 URL 即时预览（不依赖公开可读）
+        // 即时本地预览（blob）+ 后台 signed URL 兜底预览（F5 后仍能显示）
         if (file && globalThis.URL && URL.createObjectURL) coverUpload.setPreview(URL.createObjectURL(file));
+        await renderCover();
       } catch (err) {
         throw new Error('封面上传失败，请检查网络后重试。');
       }
     },
     onError: () => {},
   });
-  if (cover.value) coverUpload.setPreview(cover.value);
+  // 既有封面：用 signed URL（private）或公开 URL（public）回填上传控件预览。
+  if (cover.value) {
+    adminPreviewSrc(cover.value, coverMeta.bucket, coverMeta.path).then((src) => { if (src) coverUpload.setPreview(src); });
+  }
 
-  // 多图状态
-  const imagesState = existing?.images ? existing.images.slice() : [];
+  // 多图状态（携带 bucket/path 元信息，供后台 signed URL 预览 / 删除时定位资产）
+  const _metaFromWork = (w) => (w?.imagesMeta || (w?.images || []).map((u) => ({ url: u, bucket: null, path: null })));
+  const imagesState = existing ? _metaFromWork(existing).slice() : [];
   const titleI = h('input', { type: 'text', value: existing?.title || '', placeholder: '作品标题' });
   const introI = h('textarea', { placeholder: '作品简介' }, existing?.intro || '');
   const typeSel = h('select', {}, WORK_TYPES.map((t) => h('option', { value: t.id, selected: (existing?.type || 'illustration') === t.id }, t.name)));
@@ -135,8 +147,10 @@ export async function adminWorkEditView(params) {
   // draft（无媒体草稿）：仅 Mock 模式新增入口，创建时不传媒体；SBS 模式 create 强制 is_public=false，无需此开关
   const draftSw = isSupabase ? null : switchEl(false);
 
-  // C3：作品多图管理（仅非漫画作品）。支持上传新图 + ↑/↓ 调整顺序；删除本阶段谨慎（禁用）。
+  // C3：作品多图管理（仅非漫画作品）。支持上传新图 + ↑/↓ 调整顺序 + 单张删除（P0-2）。
   const imgListWrap = h('div', { class: 'thumb-list' });
+  // 图片删除状态（P0-5：删除中 / 删除成功 / 删除失败，仅中文提示）
+  const imgDelStatus = h('div', { class: 'form-status', 'aria-live': 'polite' });
   const imgUpload = mediaUploadControl({
     label: '添加作品图片',
     onUpload: async (file) => {
@@ -149,7 +163,7 @@ export async function adminWorkEditView(params) {
       try {
         const updated = await repo.addWorkImage(existing.id, file);
         imagesState.length = 0;
-        (updated.images || []).forEach((s) => imagesState.push(s));
+        _metaFromWork(updated).forEach((m) => imagesState.push(m));
         renderImages();
         Object.assign(existing, updated);
       } catch (err) {
@@ -162,7 +176,8 @@ export async function adminWorkEditView(params) {
   async function renderImages() {
     imgListWrap.innerHTML = '';
     for (let i = 0; i < imagesState.length; i++) {
-      const src = imagesState[i];
+      const meta = imagesState[i];
+      const src = await adminPreviewSrc(meta.url, meta.bucket, meta.path);
       const move = async (from, to) => {
         if (to < 0 || to >= imagesState.length) return;
         // 两阶段创建：尚未创建 id 时绝不访问 existing.id
@@ -170,32 +185,85 @@ export async function adminWorkEditView(params) {
         const order = imagesState.slice();
         [order[from], order[to]] = [order[to], order[from]];
         try {
-          const updated = await repo.adjustImageSort(existing.id, order);
+          const updated = await repo.adjustImageSort(existing.id, order.map((m) => m.url));
           imagesState.length = 0;
-          (updated.images || []).forEach((s) => imagesState.push(s));
+          _metaFromWork(updated).forEach((m) => imagesState.push(m));
           renderImages();
         } catch (err) {
           toast(`排序失败：${err.message || err}`);
         }
       };
+      const delBtn = h('button', { class: 'thumb__del', title: '删除此图片（底层原图将保留备份）' }, '×');
+      delBtn.addEventListener('click', async () => {
+        if (!globalThis.confirm('确定删除这张作品图片吗？\n该操作不可撤销，底层原图将保留备份；若已发布到前台，A 端将同步消失。')) return;
+        try {
+          imgDelStatus.textContent = '删除中…';
+          imgDelStatus.className = 'form-status form-status--saving';
+          const updated = await repo.removeWorkImage(existing.id, meta.url);
+          imagesState.length = 0;
+          _metaFromWork(updated).forEach((m) => imagesState.push(m));
+          renderImages();
+          Object.assign(existing, updated);
+          imgDelStatus.textContent = '删除成功';
+          imgDelStatus.className = 'form-status form-status--success';
+          toast('已删除该图片');
+        } catch (err) {
+          imgDelStatus.textContent = `删除失败：${err.message || err}`;
+          imgDelStatus.className = 'form-status form-status--failure';
+          toast(`删除失败：${err.message || err}`);
+        }
+      });
       imgListWrap.appendChild(h('div', { class: 'thumb' }, [
-        imgEl(src, null, `图${i + 1}`),
+        src ? imgEl(src, null, `图${i + 1}`) : h('div', { class: 'thumb__fail' }, '图片加载失败'),
         h('div', { class: 'thumb__move' }, [
           h('button', { title: '上移', on: { click: () => move(i, i - 1) } }, '↑'),
           h('button', { title: '下移', on: { click: () => move(i, i + 1) } }, '↓'),
         ]),
-        h('button', { class: 'thumb__del', title: '为避免误删，删除暂不开放', disabled: true }, '×'),
+        delBtn,
       ]));
     }
   }
   renderImages();
 
   const imagesSection = h('div', { class: 'field' }, [
-    h('label', { class: 'field__label' }, '作品图片（可上传 / 调整顺序；删除暂不开放）'),
+    h('label', { class: 'field__label' }, '作品图片（可上传 / 调整顺序 / 删除）'),
     imgListWrap,
+    imgDelStatus,
     // 两阶段创建：新作品尚未创建 id 前，只显示提示、不开真实上传操作
     isEdit ? imgUpload.el : h('div', { class: 'notice' }, '请先填写作品基础信息并创建作品，创建成功后即可上传封面和作品图片。'),
   ]);
+
+  // —— 危险操作区（P0-3）：删除整个作品 ——
+  // 仅管理员可触发；二次确认显示标题；若已公开先安全下架；删关联 + 删 works 记录；
+  // 底层原媒体（Storage + media_assets）保留备份；删除后 A 立即消失，不留死链 / 幽灵记录。
+  const delStatus = h('div', { class: 'form-status', 'aria-live': 'polite' });
+  const delWorkBtn = isEdit ? h('button', { type: 'button', class: 'btn btn--danger' }, '删除作品') : null;
+  if (delWorkBtn) {
+    delWorkBtn.addEventListener('click', async () => {
+      const title = existing?.title || '该作品';
+      if (!globalThis.confirm(`确定删除作品《${title}》吗？\n此操作不可撤销：作品及其全部封面 / 图片 / 漫画页将从后台与前台一并移除（底层原图保留备份）。`)) return;
+      try {
+        delStatus.textContent = '删除中…';
+        delStatus.className = 'form-status form-status--saving';
+        delWorkBtn.disabled = true;
+        await repo.remove(existing.id);
+        toast('作品已删除');
+        location.hash = '#/admin';
+        return;
+      } catch (err) {
+        delStatus.textContent = `删除失败：${err.message || err}`;
+        delStatus.className = 'form-status form-status--failure';
+        delWorkBtn.disabled = false;
+        toast(`删除失败：${err.message || err}`);
+      }
+    });
+  }
+  const dangerSection = (isEdit && delWorkBtn) ? h('div', { class: 'field danger-zone' }, [
+    h('label', { class: 'field__label' }, '危险操作区'),
+    h('p', { class: 'secondary' }, '删除作品将一并移除其全部封面 / 图片 / 漫画页（前台同步消失，底层原图保留备份）。此操作不可撤销。'),
+    delStatus,
+    delWorkBtn,
+  ]) : null;
 
   // 作品性质字段：仅漫画类型显示；非漫画隐藏且不参与保存
   const natureField = h('div', { class: 'field' }, [
@@ -338,6 +406,7 @@ export async function adminWorkEditView(params) {
     ]),
     h('div', { class: 'field' }, [h('label', { class: 'field__label' }, '封面（可替换）'), coverPrev, isEdit ? coverUpload.el : h('div', { class: 'notice' }, '请先填写作品基础信息并创建作品，创建成功后即可上传封面和作品图片。')]),
     imagesSection,
+    dangerSection,
     h('div', { class: 'field' }, [h('label', { class: 'field__label' }, '标签（关键词，回车添加）'), tagsInput.el]),
     h('div', { class: 'form-grid' }, [
       h('div', { class: 'field field--row' }, [featSw.el, h('span', {}, '是否精选')]),
@@ -363,7 +432,7 @@ export async function adminWorkEditView(params) {
 
   return adminLayout('new', h('div', {}, [
     h('div', { class: 'admin__head' }, [h('h1', {}, isEdit ? `编辑 · 《${existing.title}》` : '新增作品')]),
-    isSupabase ? h('div', { class: 'notice' }, '已连接云端：封面 / 多图上传经 Storage + media_assets 写入，但上传后作品保持「草稿」不自动公开；管理员点「发布到前台」才正式公开，可「下架」取消公开（可重新发布）。媒体物理删除暂不开放。') : null,
+    isSupabase ? h('div', { class: 'notice' }, '已连接云端：封面 / 多图上传经 Storage + media_assets 写入，上传后作品保持「草稿」不自动公开；管理员点「发布到前台」才正式公开，可「下架」取消公开（可重新发布）。支持上传 / 替换 / 排序 / 删除（含整作品、单张图片、漫画页；底层原图保留备份）。') : null,
     form,
   ]));
 }

@@ -110,7 +110,7 @@ function lazyProxy(factory, interfaceMethods) {
 // replaceCertificateImage / adjustImageSort）；remove 仍禁用，removeComicPage 保留禁用语义。
 const REPO_METHODS = [
   'list', 'getById', 'getByType', 'filter', 'stats',
-  'create', 'update', 'remove', 'addComicPage', 'removeComicPage',
+  'create', 'update', 'remove', 'addComicPage', 'removeComicPage', 'removeWorkImage',
   'reorderComicPages', 'resetDemo', 'updateCertificate',
   'uploadWorkCover', 'addWorkImage', 'replaceComicPageImage',
   'replaceCertificateImage', 'adjustImageSort',
@@ -159,7 +159,7 @@ export const repo = lazyProxy(buildRepo, REPO_METHODS);
 // C3：媒体存储也走惰性工厂（mock ↔ supabase）。
 // C1/C2 阶段 storage 一直为 Mock；C3 起正式模式（已配置 Supabase）走 SupabaseMediaStorage，
 // ?mock=1 仍走 Mock 回滚通道（保持可本地预览）。
-const STORAGE_METHODS = ['upload', 'publicUrl', 'list', 'remove'];
+const STORAGE_METHODS = ['upload', 'publicUrl', 'list', 'remove', 'signedUrl'];
 function buildStorage(mode) {
   if (mode === 'supabase') {
     return Promise.resolve(new SupabaseMediaStorage());

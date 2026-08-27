@@ -11,6 +11,7 @@ import { h } from '../../core/dom.js';
 import { imgEl } from './media.js';
 import { toast } from './primitives.js';
 import { storage, repo, auth, DATA_MODE } from '../../data/services.js';
+import { PRIVATE_BUCKET } from '../../data/storage.supabase.js';
 
 export const MAX_FILE_SIZE = 10 * 1024 * 1024;
 export const ALLOWED_MIME = ['image/jpeg', 'image/png', 'image/webp'];
@@ -53,11 +54,17 @@ export function mediaUploadControl(opts = {}) {
   const wrap = h('div', { class: 'media-upload' }, [drop, input, stateEl, showPreview ? previewEl : null]);
 
   let currentSrc = null;
+  let currentBlob = null;
   function setState(kind, msg) {
     stateEl.className = `upload-state upload-state--${kind}`;
     stateEl.textContent = msg || '';
   }
   function setPreview(src) {
+    // revoke 旧 blob URL，避免内存泄漏 / 陈旧预览
+    if (currentBlob && globalThis.URL && URL.revokeObjectURL) {
+      try { URL.revokeObjectURL(currentBlob); } catch (_) { /* ignore */ }
+    }
+    currentBlob = null;
     currentSrc = src;
     previewEl.innerHTML = '';
     if (src) previewEl.appendChild(imgEl(src, null, '预览'));
@@ -67,6 +74,7 @@ export function mediaUploadControl(opts = {}) {
     setState('waiting', '');
     previewEl.innerHTML = '';
     currentSrc = null;
+    currentBlob = null;
   }
 
   async function handleFiles(files) {
@@ -80,7 +88,11 @@ export function mediaUploadControl(opts = {}) {
     try {
       await onUpload(file);
       setState('success', '上传成功');
-      if (showPreview) setPreview(URL.createObjectURL ? '' : '');
+      // 上传完成立即显示真实本地预览（blob URL），不依赖公开可读；F5 后由后台回读 signed URL 兜底。
+      if (showPreview && file && globalThis.URL && URL.createObjectURL) {
+        currentBlob = URL.createObjectURL(file);
+        setPreview(currentBlob);
+      }
       toast('上传成功');
     } catch (err) {
       const msg = err && err.message ? err.message : String(err);
@@ -113,4 +125,27 @@ function bindDragOnly(dropEl, inputEl, onFiles) {
     const files = e.dataTransfer && e.dataTransfer.files;
     if (files && files.length) onFiles(files);
   });
+}
+
+/**
+ * 后台私有媒体预览解析（AB 模型核心：B 后台必须能预览 private 草稿媒体）。
+ * - private bucket（portfolio-private）且提供 path → 生成 Supabase Storage signed URL
+ *   （仅用于 B 后台预览；A 公开前台绝对不得获取 signed URL）。
+ * - public bucket 或未提供 path → 直接返回原 URL（public 资产公开可读）。
+ * @param {string} value 公开 URL（public 资产）或任意可直接展示的 URL
+ * @param {string|null} bucket 资产所在 bucket（来自 repo 返回的 meta：coverBucket / imagesMeta[].bucket / pages[].bucket / coverBucket）
+ * @param {string|null} path 资产在 Storage 中的路径（用于生成 signed URL）
+ * @returns {Promise<string|null>}
+ */
+export async function adminPreviewSrc(value, bucket, path) {
+  if (bucket && bucket === PRIVATE_BUCKET && path) {
+    try {
+      return await storage.signedUrl(bucket, path);
+    } catch (e) {
+      // 开发期错误仅入 console，不向客户暴露；预览失败时返回 null，由调用方显示占位。
+      console.error('[admin][preview] signedUrl 生成失败', e);
+      return null;
+    }
+  }
+  return value || null;
 }

@@ -242,10 +242,16 @@ export class MockWorkRepository extends WorkRepository {
     return this._clone(w);
   }
 
-  // C2 禁止 destructive delete（与 Supabase 模式一致）：返回 disabled 语义，不执行真实删除。
-  async remove(/* id */) {
+  // AB 模型：B 后台必须真正支持删除（Mock 回滚通道同样开放，便于本地完整维护）。
+  // 仅删逻辑记录（_works 内的作品/页/图条目），底层媒体（Mock 内联 dataURL）随之移除；
+  // 真实 Supabase 模式由 SupabaseWorkRepository 负责保留 Storage 备份。
+  async remove(id) {
     this._guardWrite();
-    return { disabled: true, reason: '媒体删除将在下一阶段（C3）开放' };
+    const i = this._works.findIndex((x) => x.id === id);
+    if (i < 0) throw new Error('作品不存在');
+    this._works.splice(i, 1);
+    this._save();
+    return { ok: true, id };
   }
 
   async addComicPage(/* comicId, image */) {
@@ -253,9 +259,29 @@ export class MockWorkRepository extends WorkRepository {
     throw new Error('C2 禁止上传漫画页：媒体写入将在 C3 开放');
   }
 
-  async removeComicPage(/* comicId, pageId */) {
+  async removeComicPage(comicId, pageId) {
     this._guardWrite();
-    return { disabled: true, reason: '漫画页删除将在下一阶段（C3）开放' };
+    const w = this._works.find((x) => x.id === comicId && x.type === 'comic');
+    if (!w) throw new Error('漫画不存在');
+    const before = (w.pages || []).length;
+    w.pages = (w.pages || []).filter((p) => p.id !== pageId);
+    if (w.pages.length === before) throw new Error('漫画页不存在');
+    // 剩余页 order 连续重排（page_number 语义在 Mock 以 order 表达，一并顺延）。
+    w.pages = w.pages.map((p, i) => ({ ...p, order: i + 1 }));
+    this._save();
+    return this._clone(w);
+  }
+
+  async removeWorkImage(workId, url) {
+    this._guardWrite();
+    const w = this._works.find((x) => x.id === workId);
+    if (!w) throw new Error('作品不存在');
+    if (!Array.isArray(w.images)) throw new Error('该作品无图片');
+    const before = w.images.length;
+    w.images = w.images.filter((u) => u !== url);
+    if (w.images.length === before) throw new Error('未找到匹配的作品图片');
+    this._save();
+    return this._clone(w);
   }
 
   async reorderComicPages(comicId, orderedIds) {

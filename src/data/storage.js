@@ -35,4 +35,14 @@ export class MockMediaStorage extends MediaStorage {
       size: file.size,
     };
   }
+
+  /**
+   * Mock 无私有/公开之分：直接返回传入的 path（即本地 dataURL / 公开 URL），
+   * 保持与 Supabase 实现的接口一致（后台预览逻辑统一走 adminPreviewSrc）。
+   * @param {string} _bucket
+   * @param {string} path
+   */
+  async signedUrl(_bucket, path) {
+    return path;
+  }
 }

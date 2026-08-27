@@ -9,7 +9,7 @@ import { h } from '../../../core/dom.js';
 import { repo, auth, DATA_MODE } from '../../../data/services.js';
 import { toast } from '../../components/primitives.js';
 import { adminLayout } from './layout.js';
-import { mediaUploadControl } from '../../components/mediaUpload.js';
+import { mediaUploadControl, adminPreviewSrc } from '../../components/mediaUpload.js';
 import { imgEl } from '../../components/media.js';
 
 export async function adminCertificateEditView(params) {
@@ -30,18 +30,28 @@ export async function adminCertificateEditView(params) {
 
   // C3：证书图片预览 + 替换（replaceCertificateImage：repaint media_asset_id；旧资产 + Storage 文件保留，不物理删除；不改动结构化字段）
   const certCoverPrev = h('div', { class: 'thumb', style: { width: '160px' } });
-  const renderCertCover = () => { certCoverPrev.innerHTML = ''; if (cert.cover) certCoverPrev.appendChild(imgEl(cert.cover, null, cert.title)); };
-  renderCertCover();
+  const certMeta = { bucket: cert.coverBucket || null, path: cert.coverPath || null };
+  // 后台预览：private 草稿媒体用 signed URL，public 资产直接用公开 URL（F5 / 退出重登后仍能正常显示）。
+  async function renderCertCover() {
+    certCoverPrev.innerHTML = '';
+    const src = await adminPreviewSrc(cert.cover, certMeta.bucket, certMeta.path);
+    if (src) certCoverPrev.appendChild(imgEl(src, null, cert.title));
+  }
+  if (cert.cover) renderCertCover();
   const certReplace = mediaUploadControl({
     label: '替换证书图片',
     onUpload: async (file) => {
       const updated = await repo.replaceCertificateImage(cert.id, file);
       Object.assign(cert, updated);
+      if (updated.coverBucket) certMeta.bucket = updated.coverBucket;
+      if (updated.coverPath) certMeta.path = updated.coverPath;
       renderCertCover();
     },
     onError: () => {},
   });
-  if (cert.cover) certReplace.setPreview(cert.cover);
+  if (cert.cover) {
+    adminPreviewSrc(cert.cover, certMeta.bucket, certMeta.path).then((src) => { if (src) certReplace.setPreview(src); });
+  }
 
   // —— 结构化字段输入 ——
   const titleI = h('input', { type: 'text', value: cert.title || '', placeholder: '证书名称' });
@@ -119,7 +129,7 @@ export async function adminCertificateEditView(params) {
       setSaving(false);
     }
   } } }, [
-    h('div', { class: 'field' }, [h('label', { class: 'field__label' }, '证书图片（可替换；删除暂不开放）'), certCoverPrev, certReplace.el]),
+    h('div', { class: 'field' }, [h('label', { class: 'field__label' }, '证书图片（可替换）'), certCoverPrev, certReplace.el]),
     h('div', { class: 'form-grid' }, [
       h('div', { class: 'field' }, [h('label', { class: 'field__label' }, '证书名称'), titleI]),
       h('div', { class: 'field' }, [h('label', { class: 'field__label' }, '类别'), categoryI]),
@@ -145,7 +155,7 @@ export async function adminCertificateEditView(params) {
       h('h1', {}, `编辑证书 · ${cert.title}`),
       isSupabase ? h('span', { class: 'badge badge--live' }, '已连接云端') : h('span', { class: 'badge badge--readonly' }, '本地预览模式'),
     ]),
-    isSupabase ? h('div', { class: 'notice' }, '已连接云端：仅保存结构化字段（名称 / 年份 / 类别 / 排序 / 展示）。证书图片替换与删除暂不开放。') : null,
+    isSupabase ? h('div', { class: 'notice' }, '已连接云端：仅保存结构化字段（名称 / 年份 / 类别 / 排序 / 展示）。证书图片支持替换（底层原图保留备份）。') : null,
     form,
   ]));
 }

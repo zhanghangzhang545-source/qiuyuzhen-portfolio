@@ -153,9 +153,13 @@ export class SupabaseWorkRepository extends WorkRepository {
       worksPickOrder: row.works_pick_order || 0,
       displaySize: row.display_size || 'standard',
       cover,
+      // 后台预览专用元信息：private 草稿媒体用 signed URL 预览；public 直接走 cover。
+      coverBucket: coverMedia?.bucket || null,
+      coverPath: coverMedia?.originalPath || null,
       coverW,
       coverH,
       images: [],
+      imagesMeta: [],
       pages: [],
     };
     return work;
@@ -202,16 +206,30 @@ export class SupabaseWorkRepository extends WorkRepository {
       const w = await this._mapWorkRow(r, mediaMap);
       if (r.type === 'comic') {
         const pr = (pagesByWork.get(r.id) || []).sort((a, b) => (a.sort_order || a.page_number) - (b.sort_order || b.page_number));
-        w.pages = pr.map((m, i) => ({
-          id: m.id,
-          order: m.sort_order || m.page_number || (i + 1),
-          image: this._assetDisplayUrl(mediaMap.get(m.media_asset_id)),
-          w: mediaMap.get(m.media_asset_id)?.originalWidth || null,
-          h: mediaMap.get(m.media_asset_id)?.originalHeight || null,
-        })).filter((p) => p.image);
+        w.pages = pr.map((m, i) => {
+          const media = mediaMap.get(m.media_asset_id);
+          return {
+            id: m.id,
+            order: m.sort_order || m.page_number || (i + 1),
+            image: this._assetDisplayUrl(media),
+            bucket: media?.bucket || null,
+            path: media?.originalPath || null,
+            w: media?.originalWidth || null,
+            h: media?.originalHeight || null,
+          };
+        }).filter((p) => p.image);
       } else if (withImages) {
         const ir = (imgsByWork.get(r.id) || []).sort((a, b) => a.sort_order - b.sort_order);
-        w.images = ir.map((m) => this._assetDisplayUrl(mediaMap.get(m.media_asset_id))).filter(Boolean);
+        const imgs = ir.map((m) => {
+          const media = mediaMap.get(m.media_asset_id);
+          return {
+            url: this._assetDisplayUrl(media),
+            bucket: media?.bucket || null,
+            path: media?.originalPath || null,
+          };
+        }).filter((x) => x.url);
+        w.images = imgs.map((x) => x.url);
+        w.imagesMeta = imgs;
       }
       works.push(w);
     }
@@ -243,6 +261,8 @@ export class SupabaseWorkRepository extends WorkRepository {
         public: c.is_public !== false,
         featured: false,
         cover: this._assetDisplayUrl(m),
+        coverBucket: m?.bucket || null,
+        coverPath: m?.originalPath || null,
         coverW: m?.originalWidth || null,
         coverH: m?.originalHeight || null,
         issuer: '',
@@ -911,17 +931,91 @@ export class SupabaseWorkRepository extends WorkRepository {
     return this.getById(workId);
   }
 
-  // —— C2 禁止项：以下方法保持禁用语义（不执行真实删除）——
-  async remove() {
-    await this._c1OrThrow();
-    // C2 不开放 destructive delete：返回明确 disabled 提示，供 UI 禁用按钮并提示「将在下一阶段开放」。
-    return { disabled: true, reason: '媒体删除暂不开放' };
+  // —— 真实删除（AB 模型：B 后台必须真正支持删）——
+  // 安全纪律：仅删除「逻辑记录」（works / work_images / comic_pages / certificates 行），
+  // 底层 Storage 文件与 media_assets 行一律保留（private + public 双份备份不物理销毁），
+  // 保证：A 前台该作品立即消失（无死链/幽灵记录），但源媒体可后续手动找回。
+  // 所有删除均经 is_admin() 守卫（非管理员由 Supabase 后端拒绝）。
+
+  async remove(id) {
+    const sb = await this._requireWritableClient();
+    const adminChk = await sb.rpc('is_admin');
+    if (!adminChk.data) throw new Error('非管理员，无删除权限');
+    // 先查 works
+    const { data: wrow, error: we } = await sb.from('works').select('id, type, is_public').eq('id', id).maybeSingle();
+    if (we) throw new Error(`works 读取失败：${we.message}`);
+    if (wrow) {
+      // 若已公开，先安全下架（清理 public 拷贝、private 源保留），避免公开端残留。
+      if (wrow.is_public) {
+        try { await this.unpublishWork(id); } catch (e) { console.error('[remove] unpublish before delete failed', e); }
+      }
+      // 删关联行（work_images / comic_pages），再删 works 主记录。
+      const { error: de1 } = await sb.from('work_images').delete().eq('work_id', id);
+      if (de1) throw new Error(`作品图片关联删除失败：${de1.message}`);
+      const { error: de2 } = await sb.from('comic_pages').delete().eq('work_id', id);
+      if (de2) throw new Error(`漫画页关联删除失败：${de2.message}`);
+      const { error: de3 } = await sb.from('works').delete().eq('id', id);
+      if (de3) throw new Error(`作品删除失败：${de3.message}`);
+      return { ok: true, id };
+    }
+    // 证书
+    const { data: crow, error: ce } = await sb.from('certificates').select('id').eq('id', id).maybeSingle();
+    if (ce) throw new Error(`certificates 读取失败：${ce.message}`);
+    if (crow) {
+      const { error: de } = await sb.from('certificates').delete().eq('id', id);
+      if (de) throw new Error(`证书删除失败：${de.message}`);
+      return { ok: true, id };
+    }
+    throw new Error('删除失败：未找到该作品或证书');
   }
-  async removeComicPage() {
-    await this._c1OrThrow();
-    // C3 边界：删除仍谨慎 —— 本阶段仅支持新增/替换/排序，物理删除留后续阶段。
-    return { disabled: true, reason: '漫画页删除暂不开放（支持新增 / 替换 / 排序）' };
+
+  async removeComicPage(comicId, pageId) {
+    const sb = await this._requireWritableClient();
+    const adminChk = await sb.rpc('is_admin');
+    if (!adminChk.data) throw new Error('非管理员，无删除权限');
+    // 删 comic_pages 行（底层 Storage 文件保留备份，不物理销毁）。
+    const { error: de } = await sb.from('comic_pages').delete().eq('id', pageId).eq('work_id', comicId);
+    if (de) throw new Error(`漫画页删除失败：${de.message}`);
+    // 剩余页 sort_order 连续重排（page_number 保持不变，避免图文错位）。
+    const { data: rows, error: rerr } = await sb.from('comic_pages').select('id, sort_order').eq('work_id', comicId).order('sort_order', { ascending: true });
+    if (rerr) throw new Error(`漫画页重排读取失败：${rerr.message}`);
+    const batch = (rows || []).map((r, i) => ({ id: r.id, work_id: comicId, sort_order: i + 1 }));
+    if (batch.length) {
+      const { error: ue } = await sb.from('comic_pages').upsert(batch);
+      if (ue) throw new Error(`漫画页重排失败：${ue.message}`);
+    }
+    return this.getById(comicId);
   }
+
+  async removeWorkImage(workId, url) {
+    const sb = await this._requireWritableClient();
+    const adminChk = await sb.rpc('is_admin');
+    if (!adminChk.data) throw new Error('非管理员，无删除权限');
+    const { data: rows, error: rerr } = await sb.from('work_images').select('id, media_asset_id').eq('work_id', workId);
+    if (rerr) throw new Error(`作品图片读取失败：${rerr.message}`);
+    const assetIds = (rows || []).map((r) => r.media_asset_id).filter(Boolean);
+    const mediaMap = await this._resolveMedia(assetIds);
+    const urlToId = new Map();
+    for (const r of (rows || [])) {
+      const u = this._assetDisplayUrl(mediaMap.get(r.media_asset_id));
+      if (u) urlToId.set(u, r.id);
+    }
+    const rowId = urlToId.get(url);
+    if (!rowId) throw new Error('未找到匹配的作品图片（URL 无匹配）');
+    // 删 work_images 关联行（底层 Storage 文件保留备份，不物理销毁）。
+    const { error: de } = await sb.from('work_images').delete().eq('id', rowId);
+    if (de) throw new Error(`作品图片删除失败：${de.message}`);
+    // 剩余图 sort_order 连续重排。
+    const { data: rem, error: rerr2 } = await sb.from('work_images').select('id, sort_order').eq('work_id', workId).order('sort_order', { ascending: true });
+    if (rerr2) throw new Error(`作品图片重排读取失败：${rerr2.message}`);
+    const batch = (rem || []).map((r, i) => ({ id: r.id, work_id: workId, sort_order: i + 1 }));
+    if (batch.length) {
+      const { error: ue } = await sb.from('work_images').upsert(batch);
+      if (ue) throw new Error(`作品图片重排失败：${ue.message}`);
+    }
+    return this.getById(workId);
+  }
+
   async resetDemo() {
     await this._c1OrThrow();
     // Mock 专用：Supabase 真实模式不提供重置。

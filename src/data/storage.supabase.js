@@ -5,6 +5,8 @@
 //   - upload(file, opts) → 上传到 portfolio-private bucket（默认）；
 //     返回 { key, url, name, size, bucket }。
 //   - publicUrl(bucket, path) → 拼接公开 URL（纯客户端，不发请求）。
+//   - signedUrl(bucket, path, expiresIn) → 生成带签名的临时访问 URL（只读预览，
+//     仅用于 B 后台预览 private 草稿媒体；A 公开前台绝不使用 signed URL）。
 //   - remove(bucket, path) → 删除 Storage 对象（仅用于上传失败回滚，UI 不直接调用）。
 //   - list(bucket, prefix) → 列举对象（辅助）。
 //
@@ -87,5 +89,21 @@ export class SupabaseMediaStorage extends MediaStorage {
     const { error } = await sb.storage.from(bucket).remove([path]);
     if (error) throw new Error(`Storage 回滚删除失败：${error.message}`);
     return true;
+  }
+
+  /**
+   * 生成带签名的临时访问 URL（只读预览，不修改任何对象）。
+   * 仅用于 B 后台预览 portfolio-private 中的草稿媒体；A 公开前台绝不使用本方法。
+   * @param {string} bucket
+   * @param {string} path
+   * @param {number} [expiresIn] 有效期秒数（默认 3600）
+   * @returns {Promise<string>} signed URL
+   */
+  async signedUrl(bucket, path, expiresIn = 3600) {
+    const sb = await this._client();
+    const { data, error } = await sb.storage.from(bucket).createSignedUrl(path, expiresIn);
+    if (error) throw new Error(`签名 URL 生成失败：${error.message}`);
+    if (!data || !data.signedUrl) throw new Error('签名 URL 生成失败：返回为空');
+    return data.signedUrl;
   }
 }

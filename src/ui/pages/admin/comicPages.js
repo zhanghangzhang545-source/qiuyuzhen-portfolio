@@ -7,7 +7,7 @@ import { repo, auth, DATA_MODE } from '../../../data/services.js';
 import { imgEl } from '../../components/media.js';
 import { toast } from '../../components/primitives.js';
 import { adminLayout } from './layout.js';
-import { mediaUploadControl } from '../../components/mediaUpload.js';
+import { mediaUploadControl, adminPreviewSrc } from '../../components/mediaUpload.js';
 
 export async function adminComicPagesView(params) {
   // 后台刷新竞态修复：先 await ensureSession（Supabase 模式）再判断授权。
@@ -36,7 +36,9 @@ export async function adminComicPagesView(params) {
   async function render() {
     list.innerHTML = '';
     const pages = (work.pages || []).slice().sort((a, b) => a.order - b.order);
-    pages.forEach((p, idx) => {
+    for (let idx = 0; idx < pages.length; idx++) {
+      const p = pages[idx];
+      const src = await adminPreviewSrc(p.image, p.bucket, p.path);
       const move = async (from, to) => {
         if (to < 0 || to >= pages.length) return;
         const ids = pages.map((x) => x.id);
@@ -65,12 +67,25 @@ export async function adminComicPagesView(params) {
         },
         onError: () => {},
       });
-      // 删除按钮：C3 仍谨慎 → disabled + 提示「后续阶段开放」
+      // P0-4：漫画页删除（二次确认 + 删 comic_pages 关联 + 剩余 sort_order 连续重排 + 底层原图保留）
       const delBtn = h('button', {
-        class: 'thumb__del', title: '为避免误删，漫画页删除暂不开放（支持新增 / 替换 / 排序）', disabled: true,
+        class: 'thumb__del', title: '删除此漫画页（底层原图保留备份）',
       }, '×');
+      delBtn.addEventListener('click', async () => {
+        if (!globalThis.confirm(`确定删除第 ${p.order} 页吗？\n该操作不可撤销，底层原图保留备份；若已发布到前台，A 阅读器将同步减少该页。`)) return;
+        try {
+          await repo.removeComicPage(work.id, p.id);
+          Object.assign(work, await repo.getById(work.id));
+          render();
+          toast('已删除该漫画页');
+        } catch (err) {
+          toast(`删除失败：${err.message || err}`);
+          Object.assign(work, await repo.getById(work.id));
+          render();
+        }
+      });
       const t = h('div', { class: 'thumb' }, [
-        imgEl(p.image, null, `第${p.order}页`),
+        src ? imgEl(src, null, `第${p.order}页`) : h('div', { class: 'thumb__fail' }, '图片加载失败'),
         h('span', { class: 'thumb__order' }, `第 ${p.order} 页`),
         h('div', { class: 'thumb__move' }, [
           h('button', { title: '上移', on: { click: () => move(idx, idx - 1) } }, '↑'),
@@ -80,7 +95,7 @@ export async function adminComicPagesView(params) {
         delBtn,
       ]);
       list.appendChild(t);
-    });
+    }
   }
   render();
 
@@ -91,7 +106,7 @@ export async function adminComicPagesView(params) {
       h('a', { class: 'btn btn--sm', href: `#/comic/${work.id}` }, '预览阅读'),
     ]),
     h('p', { class: 'secondary', style: { marginBottom: '16px' } },
-      '可用 ↑/↓ 调整阅读顺序（顺序即阅读顺序，page_number 不变）。支持上传新页与替换单页图片；删除暂不开放。'),
+      '可用 ↑/↓ 调整阅读顺序（顺序即阅读顺序，page_number 不变）。支持上传新页、替换单页图片与删除单页（底层原图保留备份）。'),
     pageUpload.el,
     h('div', { style: { marginTop: '24px' } }, list),
   ]);

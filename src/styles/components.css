@@ -170,6 +170,20 @@
 .thumb__order { position: absolute; bottom: 4px; left: 4px; background: rgba(33,27,20,.7); color: #fff; font-size: 11px; padding: 1px 6px; border-radius: 999px; }
 .thumb__move { position: absolute; bottom: 4px; right: 4px; display: flex; gap: 2px; }
 .thumb__move button { width: 20px; height: 20px; border: 0; border-radius: var(--r-sm); background: rgba(33,27,20,.7); color: #fff; font-size: 11px; line-height: 1; }
+.thumb__fail { width: 100%; min-height: 90px; display: flex; align-items: center; justify-content: center; font-size: 12px; color: #8B8177; background: #EDE4D9; padding: 8px; text-align: center; }
+
+/* 写状态机（dirty / saving / success / failure / unauthorized）与删除状态 */
+.form-status { margin-top: 8px; font-size: 13px; min-height: 18px; color: var(--ink); }
+.form-status--dirty { color: #8a6d3b; }
+.form-status--saving { color: #3a6ea5; }
+.form-status--success { color: #2e7d32; }
+.form-status--failure { color: #b23b3b; }
+.form-status--unauthorized { color: #b23b3b; }
+
+/* 危险操作区（删除整个作品） */
+.danger-zone { margin-top: var(--s4); padding: var(--s3); border: 1px solid #d9b3a6; border-radius: var(--r-md); background: #fbf3ef; }
+.danger-zone .field__label { color: #8C4736; font-weight: 600; }
+.danger-zone .secondary { margin: 4px 0 10px; color: #8a6d3b; }
 
 /* 标签输入 */
 .tag-input { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px; border: 1px solid var(--line-strong); border-radius: var(--r-md); background: var(--paper); }
