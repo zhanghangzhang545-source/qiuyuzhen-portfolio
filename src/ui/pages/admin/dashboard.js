@@ -64,7 +64,10 @@ export async function adminDashboardView() {
     content.replaceChildren(loading);
     try {
       // P0-7：轻量摘要——只取 id/title/type/year/stage/public/featured/cover，绝不读取 work_images / comic_pages。
-      const works = await repo.listAdminSummary();
+      // 正式 Supabase：专用后台轻量摘要 listAdminSummary；Mock 回滚通道用 repo.list()（不要求 Mock 实现后台摘要）。
+      const works = isSupabase
+        ? await repo.listAdminSummary()
+        : await repo.list();
       currentWorks = works;
       rerender();
     } catch (e) {

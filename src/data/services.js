@@ -109,7 +109,7 @@ function lazyProxy(factory, interfaceMethods) {
 // C3 新增媒体写方法（uploadWorkCover / addWorkImage / addComicPage[实化] / replaceComicPageImage /
 // replaceCertificateImage / adjustImageSort）；remove 仍禁用，removeComicPage 保留禁用语义。
 const REPO_METHODS = [
-  'list', 'getById', 'getByType', 'filter', 'stats',
+  'list', 'listAdminSummary', 'getById', 'getByType', 'filter', 'stats',
   'create', 'update', 'remove', 'addComicPage', 'removeComicPage', 'removeWorkImage',
   'reorderComicPages', 'resetDemo', 'updateCertificate',
   'uploadWorkCover', 'addWorkImage', 'replaceWorkImage',
