@@ -12,7 +12,7 @@ import { h } from '../../../core/dom.js';
 import { repo, auth, DATA_MODE } from '../../../data/services.js';
 import { imgEl } from '../../components/media.js';
 import { adminPreviewSrc } from '../../components/mediaUpload.js';
-import { catTag, toast } from '../../components/primitives.js';
+import { catTag, toast, clientError } from '../../components/primitives.js';
 import { adminLayout } from './layout.js';
 
 export async function adminDashboardView() {
@@ -26,38 +26,56 @@ export async function adminDashboardView() {
 
   const isSupabase = DATA_MODE.value === 'supabase';
 
-  // 加载态
   const loading = h('div', { class: 'admin__loading' }, '读取中…');
   const content = h('div', { class: 'admin__main-inner' }, loading);
+  let currentWorks = []; // P0-6：本地缓存，发布/下架后仅就地更新，禁整站 repo.list 重载
+  const busySet = new Set(); // P0-9：每行独立 busy，防并发双击
 
-  // 异步加载真实数据（可重复调用以在发布/下架后刷新）
+  function rerender() {
+    const s = computeStatsFrom(currentWorks);
+    content.replaceChildren(renderBody(currentWorks, s, isSupabase, togglePublish, busySet));
+  }
+
+  // 发布 / 下架（草稿↔发布）显式切换。
+  // P0-6：成功后本地更新行状态，禁整站 reload（避免重读 110 页漫画）。
+  // P0-9：每行独立 busy，防并发双击竞态。
+  async function togglePublish(w, action, btn) {
+    if (busySet.has(w.id)) return; // 已在进行，忽略重复触发
+    busySet.add(w.id);
+    if (btn) { btn.disabled = true; btn.textContent = action === 'publish' ? '发布中…' : '下架中…'; }
+    try {
+      if (action === 'publish') await repo.publishWork(w.id);
+      else if (action === 'unpublish') await repo.unpublishWork(w.id);
+      // 本地更新（无需重新请求全量列表）
+      const row = currentWorks.find((x) => x.id === w.id);
+      if (row) row.public = action === 'publish';
+      toast(action === 'publish' ? '已发布到前台' : '已下架（取消公开）');
+      rerender();
+    } catch (e) {
+      console.error('[dashboard] 发布/下架失败', e);
+      toast(clientError(e)); // P0-13：技术错误不外泄
+      rerender(); // 恢复按钮可用态
+    } finally {
+      busySet.delete(w.id);
+    }
+  }
+
   async function loadAndRender() {
     content.replaceChildren(loading);
     try {
-      // 消除重复全量请求：仅取一次 list，stats 由本地基于同一份 works 计算
-      const works = await repo.list();
-      const s = computeStatsFrom(works);
-      content.replaceChildren(renderBody(works, s, isSupabase, togglePublish));
+      // P0-7：轻量摘要——只取 id/title/type/year/stage/public/featured/cover，绝不读取 work_images / comic_pages。
+      const works = await repo.listAdminSummary();
+      currentWorks = works;
+      rerender();
     } catch (e) {
+      console.error('[dashboard] 读取失败', e);
       content.replaceChildren(h('div', { class: 'admin__error' }, [
         h('h2', {}, '数据读取失败'),
-        h('p', {}, e.message || String(e)),
+        h('p', {}, clientError(e)),
         h('p', { class: 'secondary' }, isSupabase
           ? '请检查网络连通性与云端配置。正式模式不会回退本地预览。'
           : '本地预览数据读取异常。'),
       ]));
-    }
-  }
-
-  // 发布 / 下架（草稿↔发布）显式切换；操作后刷新列表（item 2：Works 发布生命周期）
-  async function togglePublish(w, action) {
-    try {
-      if (action === 'publish') await repo.publishWork(w.id);
-      else if (action === 'unpublish') await repo.unpublishWork(w.id);
-      toast(action === 'publish' ? '已发布到前台' : '已下架（取消公开）');
-      await loadAndRender();
-    } catch (e) {
-      toast(`操作失败：${e.message || e}`);
     }
   }
 
@@ -66,7 +84,7 @@ export async function adminDashboardView() {
   return adminLayout('dashboard', h('div', {}, [content]));
 }
 
-function renderBody(works, s, isSupabase, onTogglePublish) {
+function renderBody(works, s, isSupabase, onTogglePublish, busySet) {
   const stat = (n, label) => h('div', { class: 'stat' }, [
     h('div', { class: 'stat__num' }, String(n)),
     h('div', { class: 'stat__label' }, label),
@@ -85,16 +103,17 @@ function renderBody(works, s, isSupabase, onTogglePublish) {
     //   - 证书：指向独立的证书结构化字段编辑页（/admin/certificate/:id/edit）。
     //   - 发布生命周期（item 2）：草稿→发布 / 已发布→下架，显式切换，绝不自动公开。
     //   - 删除：禁止 destructive delete → 按钮 disabled + 提示。
+    const isBusy = busySet.has(w.id);
     const actions = isSupabase
       ? h('div', { class: 'table__actions' }, [
           w.type === 'certificate'
             ? h('a', { class: 'icon-btn', href: `#/admin/certificate/${w.id}/edit`, title: '编辑证书字段' }, '✎')
             : h('a', { class: 'icon-btn', href: `#/admin/work/${w.id}/edit`, title: '编辑' }, '✎'),
           w.type === 'comic' ? h('a', { class: 'icon-btn', href: `#/admin/comic/${w.id}/pages`, title: '漫画页管理（排序）' }, '▦') : null,
-          // 发布 / 下架 显式控制（item 2）
+          // 发布 / 下架 显式控制（item 2）；P0-9：进行中禁用防双击。
           w.public !== false
-            ? h('button', { class: 'icon-btn', title: '下架（取消公开，前台不可见）', on: { click: () => onTogglePublish(w, 'unpublish') } }, '下架')
-            : h('button', { class: 'icon-btn', title: '发布（确认公开到前台）', on: { click: () => onTogglePublish(w, 'publish') } }, '发布'),
+            ? h('button', { class: 'icon-btn', title: '下架（取消公开，前台不可见）', disabled: isBusy, on: { click: (e) => onTogglePublish(w, 'unpublish', e.currentTarget) } }, '下架')
+            : h('button', { class: 'icon-btn', title: '发布（确认公开到前台）', disabled: isBusy, on: { click: (e) => onTogglePublish(w, 'publish', e.currentTarget) } }, '发布'),
         ])
       : h('div', { class: 'table__actions' }, [
           w.type !== 'certificate' ? h('a', { class: 'icon-btn', href: `#/admin/work/${w.id}/edit`, title: '编辑' }, '✎') : null,

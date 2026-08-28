@@ -5,7 +5,7 @@
 import { h } from '../../../core/dom.js';
 import { repo, auth, DATA_MODE } from '../../../data/services.js';
 import { imgEl } from '../../components/media.js';
-import { toast } from '../../components/primitives.js';
+import { toast, clientError } from '../../components/primitives.js';
 import { adminLayout } from './layout.js';
 import { WORK_TYPES, STAGES } from '../../../data/types.js';
 import { mediaUploadControl, adminPreviewSrc } from '../../components/mediaUpload.js';
@@ -98,6 +98,7 @@ export async function adminWorkEditView(params) {
           throw new Error(msg);
         }
         try {
+          toast('正在上传封面…'); // P0-8：长操作立即反馈
           const updated = await repo.uploadWorkCover(existing.id, file);
           cover.value = updated.cover;
           if (updated.coverBucket) coverMeta.bucket = updated.coverBucket;
@@ -178,6 +179,7 @@ export async function adminWorkEditView(params) {
           throw new Error(msg);
         }
         try {
+          toast('正在上传作品图片…'); // P0-8：长操作立即反馈
           const updated = await repo.addWorkImage(existing.id, file);
           imagesState.length = 0;
           _metaFromWork(updated).forEach((m) => imagesState.push(m));
@@ -304,7 +306,7 @@ export async function adminWorkEditView(params) {
   renderImages();
 
   const imagesSection = h('div', { class: 'field' }, [
-    h('label', { class: 'field__label' }, '作品图片（可上传 / 调整顺序 / 删除）'),
+    h('label', { class: 'field__label' }, '作品图片（可先选择图片；创建后可继续排序 / 替换 / 删除）'),
     imgListWrap,
     imgDelStatus,
     // FINAL16.1：新建态也展示真实可点击上传入口 + 内存预览列表（不再用 notice 替代）
@@ -330,10 +332,12 @@ export async function adminWorkEditView(params) {
         location.hash = '#/admin';
         return;
       } catch (err) {
-        delStatus.textContent = `删除失败：${err.message || err}`;
+        console.error('[workEdit] 删除失败', err);
+        const msg = clientError(err);
+        delStatus.textContent = `删除失败：${msg}`;
         delStatus.className = 'form-status form-status--failure';
         delWorkBtn.disabled = false;
-        toast(`删除失败：${err.message || err}`);
+        toast(`删除失败：${msg}`);
       }
     });
   }
@@ -355,7 +359,22 @@ export async function adminWorkEditView(params) {
     imagesSection.hidden = isComic;
     natureField.hidden = !isComic;
   };
-  typeSel.addEventListener('change', toggleTypeFields);
+  // P1-15：插画/油画已选待上传图片后切到漫画 → 弹确认清空 pending，取消则恢复类型。
+  function clearPendingImages() {
+    for (const item of pendingImageFiles) {
+      if (item.url && globalThis.URL && URL.revokeObjectURL) { try { URL.revokeObjectURL(item.url); } catch (_) { /* ignore */ } }
+    }
+    pendingImageFiles.length = 0;
+    renderPendingImages();
+  }
+  typeSel.addEventListener('change', () => {
+    if (typeSel.value === 'comic' && pendingImageFiles.length > 0) {
+      const ok = globalThis.confirm('漫画正文图片需要在漫画页管理中上传。切换为漫画将清空当前待上传作品图片，是否继续？');
+      if (!ok) { typeSel.value = (existing && existing.type === 'comic') ? 'comic' : 'illustration'; }
+      else { clearPendingImages(); }
+    }
+    toggleTypeFields();
+  });
   toggleTypeFields();
   // #1 修复：编辑现有作品时 type 已冻结（C2 禁止改 type），禁用下拉避免用户误改；
   // 新建作品才允许选择（payload 仅在 !isEdit 时含 type）。
@@ -409,15 +428,27 @@ export async function adminWorkEditView(params) {
     : null;
   if (publishBtn) {
     publishBtn.addEventListener('click', async () => {
-      if (publishBtn.disabled) return; // P0-28：防双击（操作期间禁用）
+      if (publishBtn.disabled) return; // P0-9：防双击（操作期间禁用）
+      const wasPublic = pubState;
       publishBtn.disabled = true;
+      publishBtn.textContent = wasPublic ? '下架中…' : '发布中…'; // P0-8：长操作立即反馈
       try {
-        if (pubState) { await repo.unpublishWork(existing.id); pubState = false; publishBtn.textContent = '发布到前台'; toast('已下架（取消公开）'); }
-        else { await repo.publishWork(existing.id); pubState = true; publishBtn.textContent = '下架（取消公开）'; toast('已发布到前台'); }
-        const refreshed = await repo.getById(existing.id);
-        if (refreshed) Object.assign(existing, refreshed);
-      } catch (e) { toast(`操作失败：${e.message || e}`); }
-      finally { publishBtn.disabled = isDirty; publishBtn.title = isDirty ? '请先保存修改后再发布' : ''; }
+        // P0-6：发布/下架使用返回值直接刷新本地状态，杜绝成功后再 getById 的重复读。
+        const updated = wasPublic
+          ? await repo.unpublishWork(existing.id)
+          : await repo.publishWork(existing.id);
+        if (updated) Object.assign(existing, updated);
+        pubState = !wasPublic;
+        publishBtn.textContent = pubState ? '下架（取消公开）' : '发布到前台';
+        toast(pubState ? '已发布到前台' : '已下架（取消公开）');
+      } catch (e) {
+        console.error('[workEdit] 发布/下架失败', e);
+        publishBtn.textContent = wasPublic ? '下架（取消公开）' : '发布到前台';
+        toast(clientError(e)); // P0-13：技术错误不外泄
+      } finally {
+        publishBtn.disabled = isDirty;
+        publishBtn.title = isDirty ? '请先保存修改后再发布' : '';
+      }
     });
   }
 
@@ -474,21 +505,26 @@ export async function adminWorkEditView(params) {
     try {
       let saved;
       if (isEdit) {
-        saved = await repo.update(existing.id, payload);
+        // P0-1：编辑态保存走快速路径——只执行 works UPDATE，成功即返回最小结果，禁止再读取全部媒体（省 N 次请求）。
+        //       成功后保持编辑页（不跳 Dashboard），本地合并 payload 到 existing，重新启用「发布到前台」。
+        saved = await repo.update(existing.id, payload, { hydrate: false });
       } else {
-        saved = await repo.create(payload);
+        // P0-2：新建只取 saved.id，绝不 hydrate（省 N 次请求）；后续编辑页首读即可拿到完整数据。
+        //       autoPublish:false 复用「新作恒为草稿」已知状态，避免重复 _parentIsPublic 读。
+        saved = await repo.create(payload, { hydrate: false });
         // ===== FINAL16.1：新建态自动上传 pending 媒体（不重复创建作品；失败保留已成功图片并进入编辑页）=====
         const isComicType = typeSel.value === 'comic';
         let mediaFailed = false;
         // 1) 封面（漫画 / 非漫画都先传封面）
         if (pendingCoverFile) {
-          try { await repo.uploadWorkCover(saved.id, pendingCoverFile); }
+          try { toast('正在上传封面…'); await repo.uploadWorkCover(saved.id, pendingCoverFile, { hydrate: false, autoPublish: false }); }
           catch (e) { mediaFailed = true; console.error('[new] 封面上传失败', e); }
         }
         // 2) 非漫画：按客户选择顺序逐张 await 上传，禁止 Promise.all（避免顺序被上传速度打乱）
         if (!isComicType) {
-          for (const item of pendingImageFiles) {
-            try { await repo.addWorkImage(saved.id, item.file); }
+          for (let i = 0; i < pendingImageFiles.length; i++) {
+            const item = pendingImageFiles[i];
+            try { toast(`正在上传作品图片 ${i + 1}/${pendingImageFiles.length}…`); await repo.addWorkImage(saved.id, item.file, { hydrate: false, autoPublish: false }); }
             catch (e) { mediaFailed = true; console.error('[new] 图片上传失败', e); }
           }
         }
@@ -501,16 +537,20 @@ export async function adminWorkEditView(params) {
         else location.hash = `#/admin/work/${saved.id}/edit`;
         return;
       }
+      // P0-1：编辑态保存成功——保持编辑页（不跳 Dashboard），本地合并、重新启用发布按钮（setSaving(false) 处理）。
       isDirty = false;
-      setStatus('success', isEdit ? '已保存修改' : '已新增作品');
-      toast(isEdit ? '已保存修改' : '已新增作品');
-      if (payload.type === 'comic' && !isEdit) location.hash = `#/admin/comic/${saved.id}/pages`;
-      else if (!isEdit) location.hash = `#/admin/work/${saved.id}/edit`;
-      else location.hash = '#/admin';
+      setStatus('success', '已保存修改');
+      toast('已保存修改');
+      if (isEdit) {
+        Object.assign(existing, payload);
+      } else if (payload.type === 'comic') location.hash = `#/admin/comic/${saved.id}/pages`;
+      else location.hash = `#/admin/work/${saved.id}/edit`;
     } catch (err) {
-      // 失败：保留表单值、不跳页、显式提示（#6）
-      setStatus('failure', `保存失败：${err.message || err}`);
-      toast(`保存失败：${err.message || err}`);
+      // 失败：保留表单值、不跳页、显式提示（#6）；P0-13：技术错误不外泄。
+      console.error('[workEdit] 保存失败', err);
+      const msg = clientError(err);
+      setStatus('failure', `保存失败：${msg}`);
+      toast(`保存失败：${msg}`);
     } finally {
       setSaving(false);
     }

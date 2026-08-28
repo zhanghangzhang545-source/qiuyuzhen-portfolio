@@ -39,13 +39,16 @@ export function mediaUploadControl(opts = {}) {
   const { label = '上传图片', onUpload, onError } = opts;
   const accept = opts.accept || 'image/jpeg,image/png,image/webp';
   const showPreview = opts.showPreview !== false;
+  // P0-12：多选仅用于「添加作品图片 / 漫画页」；封面 / 替换单张保持 false（一次一个）。
+  const multiple = opts.multiple === true;
 
   const input = h('input', { type: 'file', accept, style: { display: 'none' } });
+  if (multiple) input.setAttribute('multiple', '');
   const drop = h('div', { class: 'file-drop' }, [
     h('div', { class: 'file-drop__hint' }, [
       h('span', { class: 'file-drop__icon' }, '⬆'),
       h('span', {}, label),
-      h('span', { class: 'file-drop__sub' }, '支持 jpg / png / webp，单张 ≤ 10MB'),
+      h('span', { class: 'file-drop__sub' }, multiple ? '支持 jpg / png / webp，单张 ≤ 10MB，可一次多选' : '支持 jpg / png / webp，单张 ≤ 10MB'),
     ]),
   ]);
   const stateEl = h('div', { class: 'upload-state', 'aria-live': 'polite' });
@@ -55,6 +58,7 @@ export function mediaUploadControl(opts = {}) {
 
   let currentSrc = null;
   let currentBlob = null;
+  let busy = false; // P0-9：内部 busy 锁，防双击 / 拖拽竞态（进行中拒绝再次触发）
   function setState(kind, msg) {
     stateEl.className = `upload-state upload-state--${kind}`;
     stateEl.textContent = msg || '';
@@ -84,40 +88,79 @@ export function mediaUploadControl(opts = {}) {
     currentBlob = null;
   }
 
+  function toFileList(files) {
+    if (multiple) {
+      const arr = [];
+      for (let i = 0; i < (files ? files.length : 0); i++) arr.push(files[i]);
+      return arr;
+    }
+    const f = files && (files[0] || files);
+    return f ? [f] : [];
+  }
+
   async function handleFiles(files) {
-    const file = files && (files[0] || files);
-    if (!file) return;
+    if (busy) return; // P0-9：进行中直接忽略后续触发（双击 / 重复 drop）
+    const list = toFileList(files);
+    if (!list.length) return;
     // 未授权 → 撤权回 login（与后台其它写一致）
     if (!auth.isAuthed()) { auth.logout && auth.logout(); location.hash = '#/admin/login'; return; }
-    const v = validateFile(file);
-    if (!v.ok) { setState('failed', v.error); toast(v.error); return; }
-    setState('uploading', '上传中…');
+    busy = true;
+    input.disabled = true;        // P0-9：禁用 input，阻止再次点击触发
+    drop.setAttribute('aria-busy', 'true');
+    const total = list.length;
+    const failed = [];
     try {
-      await onUpload(file);
-      setState('success', '上传成功');
-      // 上传完成立即显示真实本地预览（blob URL），不依赖公开可读；F5 后由后台回读 signed URL 兜底。
-      if (showPreview && file && globalThis.URL && URL.createObjectURL) {
-        // 先创建新 blob，再交给 setPreview 登记（setPreview 只 revoke「上一次」旧 blob，不会动当前新 blob）
-        const nextBlob = URL.createObjectURL(file);
-        setPreview(nextBlob);
+      // P0-12：按 FileList 原顺序逐张 await 处理（禁按上传速度定序）；单张失败指名并保留成功项。
+      for (let i = 0; i < total; i++) {
+        const file = list[i];
+        const v = validateFile(file);
+        if (!v.ok) {
+          failed.push(file.name || `文件${i + 1}`);
+          setState('failed', v.error);
+          toast(v.error);
+          continue;
+        }
+        setState('uploading', total > 1 ? `正在处理 ${i + 1}/${total}…` : '上传中…');
+        try {
+          await onUpload(file);
+          // 单张模式：上传完成立即显示真实本地预览（blob URL），不依赖公开可读；F5 后由后台回读 signed URL 兜底。
+          if (showPreview && total === 1 && file && globalThis.URL && URL.createObjectURL) {
+            const nextBlob = URL.createObjectURL(file);
+            setPreview(nextBlob);
+          }
+        } catch (err) {
+          const fname = file.name || `文件${i + 1}`;
+          failed.push(fname);
+          const msg = err && err.message ? err.message : String(err);
+          setState('failed', `「${fname}」上传失败：${msg}`);
+          onError && onError(err);
+          // P0-12：单张失败不中断，继续处理后续文件（已成功项保留）
+        }
       }
-      toast('上传成功');
-    } catch (err) {
-      const msg = err && err.message ? err.message : String(err);
-      setState('failed', `上传失败：${msg}`);
-      toast(`上传失败：${msg}`);
-      onError && onError(err);
+    } finally {
+      busy = false;
+      input.disabled = false;
+      drop.removeAttribute('aria-busy');
+    }
+    if (failed.length === 0) {
+      setState('success', total > 1 ? `已处理 ${total} 个文件` : '上传成功');
+      if (total === 1) toast('上传成功');
+    } else if (failed.length < total) {
+      setState('failed', `以下文件上传失败：${failed.join('、')}（其余已成功）`);
+    } else {
+      setState('failed', `上传失败：${failed.join('、')}`);
+      toast('上传失败，请检查网络后重试');
     }
   }
 
-  // 点击/拖拽统一入口
-  drop.addEventListener('click', (e) => { if (e.target === input) return; input.click(); });
+  // 点击/拖拽统一入口（busy 时忽略点击，避免 input.click 回环）
+  drop.addEventListener('click', (e) => { if (busy) return; if (e.target === input) return; input.click(); });
   input.addEventListener('change', () => handleFiles(input.files));
   // 复用既有 bindFileDrop（点击隐藏 input + 拖拽）
   // 注意：bindFileDrop 也会绑定 click，这里避免双触发 —— 仅用其拖拽部分；点击已上方处理。
   bindDragOnly(drop, input, handleFiles);
 
-  return { el: wrap, reset, setPreview, getPreview: () => currentSrc };
+  return { el: wrap, reset, setPreview, getPreview: () => currentSrc, isBusy: () => busy };
 }
 
 // 仅绑定拖拽（点击由上方显式处理，避免 bindFileDrop 的 click → input.click 回环）

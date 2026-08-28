@@ -25,6 +25,11 @@ import { getSupabase, hasSupabaseConfig } from './supabaseClient.js';
 export const PUBLIC_BUCKET = 'portfolio-public';
 export const PRIVATE_BUCKET = 'portfolio-private';
 
+// P0-11：signed URL 内存缓存（不写 localStorage）。key = `${bucket}:${path}`；
+// 同源重复请求在有效期内（≤50 分钟）直接复用，显著降低后台预览的签名请求数。
+// path 变化 → miss（保证草稿替换后拿到新 URL）。
+const _signedUrlCache = new Map();
+
 export class SupabaseMediaStorage extends MediaStorage {
   constructor(injectedClient = null) {
     super();
@@ -100,10 +105,18 @@ export class SupabaseMediaStorage extends MediaStorage {
    * @returns {Promise<string>} signed URL
    */
   async signedUrl(bucket, path, expiresIn = 3600) {
+    const key = `${bucket}:${path}`;
+    const cached = _signedUrlCache.get(key);
+    const now = Date.now();
+    // P0-11：命中且未过期（最多 50 分钟复用）→ 直接返回，不发签名请求
+    if (cached && cached.exp > now) return cached.url;
     const sb = await this._client();
     const { data, error } = await sb.storage.from(bucket).createSignedUrl(path, expiresIn);
     if (error) throw new Error(`签名 URL 生成失败：${error.message}`);
     if (!data || !data.signedUrl) throw new Error('签名 URL 生成失败：返回为空');
+    // 缓存：到期时间 = now + min(expiresIn, 3000)s；expiresIn 通常 3600 → 取 50 分钟上限，避免临近过期复用失效 URL
+    const ttl = Math.min(expiresIn, 3000) * 1000;
+    _signedUrlCache.set(key, { url: data.signedUrl, exp: now + ttl });
     return data.signedUrl;
   }
 }

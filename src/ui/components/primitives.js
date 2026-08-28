@@ -47,6 +47,23 @@ export function toast(msg) {
 }
 
 /**
+ * P0-13：客户错误与开发错误彻底分离。
+ * 完整技术错误（PGRST / SQL / RPC signature / code / details / hint / Cannot read properties）
+ * 一律不得直接展示给客户——仅返回安全的中文提示；完整错误由调用方 `console.error` 记录。
+ * 已知「客户友好中文」（如「请先上传封面再发布」）不含技术标识，原样返回。
+ * @param {Error|string} err
+ * @returns {string} 可安全展示给客户的提示
+ */
+const TECH_MARK = /PGRST|SQLSTATE|code:\s*\S|Cannot read|is not a function|undefined is not|RPC |violates|duplicate key|signature|详情：|提示：|hint:/i;
+export function clientError(err) {
+  const raw = err && err.message ? err.message : String(err == null ? '' : err);
+  // 已是安全中文（不含技术标识） → 原样返回
+  if (!TECH_MARK.test(raw)) return raw || '操作失败，请稍后重试';
+  // 含技术标识 → 绝不外泄，返回通用安全提示
+  return '操作失败，请检查网络或稍后重试；若持续失败请联系维护人员。';
+}
+
+/**
  * 让 .file-drop 容器同时支持「点击选择」与「拖拽上传」，且不改动 DOM 结构。
  * - 点击容器 → 触发调用方持有的隐藏 file input 打开系统选择框（保留原点击能力）
  * - 拖拽文件到容器 → 高亮 .is-drag，松手时把文件交给 onFiles（走与点击相同的上传逻辑）
