@@ -1365,81 +1365,43 @@ export class SupabaseWorkRepository extends WorkRepository {
     const key = `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}_${safeName}`;
     const assetId = this._genAssetId(parentType, parentId);
 
-    // 1) 上传到 portfolio-private（未审核资产不进 public）
-    const up = await sb.storage.from(PRIVATE_BUCKET).upload(key, file, { cacheControl: '3600', upsert: false });
+    // FINAL16.3-SIMPLE：新上传直接进入 portfolio-public（随机不可预测路径），单次传输；
+    // 不再上传 private、不再 autoPublish、不再调用任何 prepare/publish RPC、不再跨 bucket 搬运。
+    const up = await sb.storage.from(PUBLIC_BUCKET).upload(key, file, { cacheControl: '3600', upsert: false });
     if (up.error) throw new Error(`Storage 上传失败：${up.error.message}`);
     const path = (up.data && up.data.path) || key;
 
     const ctx = { rollbacks: [] };
-    let prepared = false;
-    let preparedOne = null;
+    let linkResult = null;
     try {
-      // 2) 插入 media_assets（private）
+      // 插入 media_assets（public；Simple AB：草稿仅由 is_public 标志隐藏，不要求 Storage 私密隔离）
       const { error: ae } = await sb.from('media_assets').insert({
-        id: assetId, bucket: PRIVATE_BUCKET, original_path: path,
+        id: assetId, bucket: PUBLIC_BUCKET, original_path: path,
         original_width: null, original_height: null, format, created_at: new Date().toISOString(),
       });
       if (ae) throw new Error(`media_assets 写入失败：${ae.message}`);
-      // 3) P0-一：公开作品编辑——先「预发布」新媒体（public Storage + canonical，不要求已关联），再切换父 FK。
-      //    草稿作品（autoPublish=false）A 不可见，直接 link 即可，无窗口问题。
-      if (autoPublish) {
-        preparedOne = await this._prepareOneAssetPublic(assetId, parentType, parentId, { _adminChecked: true });
-        prepared = true;
-      }
-      // 4) 关联/切换父记录：linkFn 在改动前把旧引用注册进 ctx.rollbacks（P0-G）
-      if (linkFn) await linkFn(assetId, ctx);
-      // P0-一 recommended step 4：验证资产已真正公开（DB canonical + Storage 均正常）
-      if (autoPublish && preparedOne) {
-        const { data: va, error: vae } = await sb.from('media_assets').select('bucket, original_path').eq('id', assetId).maybeSingle();
-        if (vae) throw new Error(`预发布校验失败：${vae.message}`);
-        if (!va || va.bucket !== PUBLIC_BUCKET) throw new Error('预发布校验失败：资产未进入 public bucket');
-        const okPub = await this._objectExists(PUBLIC_BUCKET, preparedOne.publicOriginalPath);
-        if (!okPub) throw new Error('预发布校验失败：public Storage 对象不存在');
-      }
+      // 关联/切换父记录：linkFn 在改动前把旧引用注册进 ctx.rollbacks（P0-G）
+      linkResult = linkFn ? await linkFn(assetId, ctx) : null;
     } catch (e) {
-      // P0-G：先回放 rollbacks 恢复「修改前父引用状态」（A B C 不变），再清理本次新资产。
+      // 回放 rollbacks 恢复「修改前父引用状态」，再清理本次新资产（public Storage 对象 + media_assets 行）。
       for (const rb of (ctx.rollbacks || []).reverse()) { try { await rb(); } catch (_) { /* 尽力 */ } }
-      let preserveForManual = false;
-      if (prepared && preparedOne) {
-        // 已预发布的 orphan 资产：回滚为 private + 清理 public 副本（DB 仍引用则保留，绝不假装成功）
-        const rbRes = await this._rollbackPreparedAsset(preparedOne);
-        if (rbRes.ok) {
-          // 清理 staging 副本（media_assets 行随后删除，副本失引用）
-          try { await this._deleteStorage(PRIVATE_BUCKET, `staging/${preparedOne.publicOriginalPath}`); } catch (_) { /* 尽力 */ }
-          for (const vp of (preparedOne.publicVariantPaths || [])) try { await this._deleteStorage(PRIVATE_BUCKET, `staging/${vp.path}`); } catch (_) { /* 尽力 */ }
-        } else {
-          // 回滚失败：资产可能仍 public orphan → 保留 media_assets 行（及 public 副本）供人工恢复
-          preserveForManual = true;
-        }
-      }
-      // 原始 private 上传始终已失引用 → 清理
-      try { await sb.storage.from(PRIVATE_BUCKET).remove([path]); } catch (_) { /* 回滚尽力而为 */ }
-      if (!preserveForManual) {
-        try { await sb.from('media_assets').delete().eq('id', assetId); } catch (_) { /* 回滚尽力而为 */ }
-      }
-      if (preserveForManual) {
-        throw new Error(`操作未完成，系统已保留数据，请停止继续操作并联系维护人员。（预发布回滚未完成：${(preparedOne && preparedOne.publicOriginalPath) || ''}）原始错误：${e.message}`);
-      }
+      try { await sb.storage.from(PUBLIC_BUCKET).remove([path]); } catch (_) { /* 回滚尽力而为 */ }
+      try { await sb.from('media_assets').delete().eq('id', assetId); } catch (_) { /* 回滚尽力而为 */ }
       throw e;
     }
 
-    // P0-十：autoPublish 返回真实 canonical public path（非 private key）
-    const finalBucket = autoPublish ? PUBLIC_BUCKET : PRIVATE_BUCKET;
-    const finalPath = autoPublish && preparedOne ? preparedOne.publicOriginalPath : path;
-    const url = this._publicUrl(finalBucket, finalPath);
-    return { assetId, key: path, url, bucket: finalBucket, format };
+    // FINAL16.3-SIMPLE：资产一律 public，直接返回 public URL + 稳定 id；linkFn 返回值一并回传（供上层取新关联 id）。
+    const url = this._publicUrl(PUBLIC_BUCKET, path);
+    return { assetId, key: path, url, bucket: PUBLIC_BUCKET, format, link: linkResult };
   }
 
-  /** C3：上传并替换作品封面（repaint works.cover_asset_id；旧资产 + Storage 文件保留） */
+  /** C3/FINAL16.3-SIMPLE：上传并替换作品封面（repaint works.cover_asset_id；旧资产 + Storage 文件保留）。
+   *  轻量返回（不回读全部媒体），供 UI 本地合并封面。 */
   async uploadWorkCover(workId, file, opts = {}) {
     const sb = await this._requireWritableClient();
-    // P0-3：顶层已校验管理员则复用，避免重复 is_admin RPC。
     const sbAdmin = await this._requireAdmin({ _adminChecked: opts._adminChecked });
-    // P0-2：autoPublish 提示——已知 draft（新建流程）时复用，避免重复 _parentIsPublic 读取；
-    //       默认仍走 _parentIsPublic 保安全语义。
-    const autoPublish = (opts.autoPublish !== undefined) ? opts.autoPublish : await this._parentIsPublic('work', workId);
     const res = await this._uploadAndLink(file, {
-      parentType: 'work', parentId: workId, autoPublish, _adminChecked: true,
+      parentType: 'work', parentId: workId, _adminChecked: true,
       linkFn: async (assetId, ctx) => {
         // P0-G：切换前捕获旧封面引用，失败可完整恢复（替换失败仍是 A B C）
         const { data: old } = await sb.from('works').select('cover_asset_id').eq('id', workId).maybeSingle();
@@ -1451,19 +1413,17 @@ export class SupabaseWorkRepository extends WorkRepository {
         if (error) throw new Error(`作品封面关联失败：${error.message}`);
       },
     });
-    // P0-2：fast mode —— 上传/替换后不回读全部媒体（省 N 次请求）；返回最小成功结果。
-    if (opts.hydrate === false) return { id: workId, _fast: true };
-    return this.getById(workId);
+    // FINAL16.3-SIMPLE：轻量返回（不回读），UI 本地合并封面。
+    return { id: workId, cover: res.url, coverBucket: res.bucket, coverPath: res.key, coverAssetId: res.assetId };
   }
 
-  /** C3：新增作品多图（追加到 work_images，sort_order = 当前最大 + 1） */
+  /** C3/FINAL16.3-SIMPLE：新增作品多图（追加到 work_images，sort_order = 当前最大 + 1）；
+   *  轻量返回新图（含服务端稳定 id），UI 本地追加，禁止完整 getById。 */
   async addWorkImage(workId, file, opts = {}) {
     const sb = await this._requireWritableClient();
     const sbAdmin = await this._requireAdmin({ _adminChecked: opts._adminChecked });
-    // P0-2：autoPublish 提示（同 uploadWorkCover）。
-    const autoPublish = (opts.autoPublish !== undefined) ? opts.autoPublish : await this._parentIsPublic('work', workId);
     const res = await this._uploadAndLink(file, {
-      parentType: 'work', parentId: workId, autoPublish, _adminChecked: true,
+      parentType: 'work', parentId: workId, _adminChecked: true,
       linkFn: async (assetId, ctx) => {
         // P0-八：数据库级原子追加（append_work_image 在事务内 FOR UPDATE 锁定 work，计算 max+1 插入），
         //   杜绝 JS 端 SELECT max → +1 → INSERT 的并发相同 sort_order。
@@ -1474,14 +1434,15 @@ export class SupabaseWorkRepository extends WorkRepository {
         ctx.rollbacks.push(async () => {
           await sb.from('work_images').delete().eq('id', r.image_id);
         });
+        return { imageId: r.image_id };
       },
     });
-    // P0-2：fast mode —— 上传后不回读全部媒体。
-    if (opts.hydrate === false) return { id: workId, _fast: true };
-    return this.getById(workId);
+    // FINAL16.3-SIMPLE：轻量返回新图（含稳定 id），UI 本地追加，禁止完整 getById。
+    return { id: workId, image: { id: res.link && res.link.imageId, assetId: res.assetId, url: res.url, bucket: res.bucket, path: res.key, sortOrder: null } };
   }
 
-  /** C3：调整作品多图顺序（单次批量 upsert，原子；无半成功）。@param orderedSrcs 目标顺序的公开 URL 数组（与 Work.images 对齐） */
+  /** C3/FINAL16.3-SIMPLE：调整作品多图顺序（单次批量 upsert，原子；无半成功）。
+   *  以稳定 work_images.id 为身份（不再用 URL 匹配）。轻量返回（不回读），UI 本地重排。 */
   async adjustImageSort(workId, orderedImageIds) {
     const sb = await this._requireWritableClient();
     // P0-11：以稳定 work_images.id 为身份（不再用 URL 匹配）。
@@ -1505,20 +1466,20 @@ export class SupabaseWorkRepository extends WorkRepository {
     }));
     const { error } = await sb.from('work_images').upsert(batch);
     if (error) throw new Error(`作品图片重排失败：${error.message}`);
-    return this.getById(workId);
+    // FINAL16.3-SIMPLE：轻量返回（不回读），UI 本地重排。
+    return { id: workId, ok: true };
   }
 
   /**
-   * C3：新增漫画页（实化，原 C2 为禁用 stub）。
+   * C3/FINAL16.3-SIMPLE：新增漫画页（实化）。
    * page_number = 当前最大 + 1（真实页码），sort_order 同 page_number；
    * 二者均随新增单调递增，重排仅改 sort_order（见 reorderComicPages），page_number 永久不变。
+   * 轻量返回 pages（经 _readComicPagesOrdered，不回读全 work）。
    */
   async addComicPage(comicId, file) {
     const sb = await this._requireWritableClient();
-    // P0-6：继承漫画公开意图（已发布漫画新增页也发布，避免阅读器断图）。
-    const autoPublish = await this._parentIsPublic('work', comicId);
     const res = await this._uploadAndLink(file, {
-      parentType: 'work', parentId: comicId, autoPublish,
+      parentType: 'work', parentId: comicId,
       linkFn: async (assetId, ctx) => {
         // P0-八：数据库级原子追加（append_comic_page 在事务内 FOR UPDATE 锁定 work，计算 max+1 插入）
         const { data: r, error } = await sb.rpc('append_comic_page', { p_work_id: comicId, p_media_asset_id: assetId });
@@ -1530,21 +1491,21 @@ export class SupabaseWorkRepository extends WorkRepository {
         });
       },
     });
-    return this.getById(comicId);
+    // FINAL16.3-SIMPLE：轻量返回 pages（不回读全 work），UI 直接刷新页列表。
+    return { id: comicId, pages: await this._readComicPagesOrdered(comicId) };
   }
 
-  /** C3：替换单张漫画页图片（repaint comic_pages.media_asset_id；旧资产 + Storage 文件保留，不物理删除） */
+  /** C3/FINAL16.3-SIMPLE：替换单张漫画页图片（repaint comic_pages.media_asset_id；旧资产 + Storage 文件保留，不物理删除）。
+   *  轻量返回 pages（经 _readComicPagesOrdered），UI 直接刷新页列表，禁止完整 getById。 */
   async replaceComicPageImage(pageId, file) {
     const sb = await this._requireWritableClient();
-    // 先读取该页所属 work_id（parentType='work'，parentId 用 comicId 以便 publish 翻转 works 之外不受影响）
+    // 先读取该页所属 work_id
     const { data: pageRow, error: qe } = await sb.from('comic_pages').select('id, work_id').eq('id', pageId).maybeSingle();
     if (qe) throw new Error(`漫画页读取失败：${qe.message}`);
     if (!pageRow) throw new Error('漫画页不存在');
     const comicId = pageRow.work_id;
-    // P0-6：继承漫画公开意图（已发布漫画替换页也发布，避免阅读器断图）。
-    const autoPublish = await this._parentIsPublic('work', comicId);
     const res = await this._uploadAndLink(file, {
-      parentType: 'work', parentId: comicId, autoPublish,
+      parentType: 'work', parentId: comicId,
       linkFn: async (assetId, ctx) => {
         // P0-G：替换前捕获旧 media_asset_id，失败恢复原位（A B C 不变）
         const { data: old } = await sb.from('comic_pages').select('media_asset_id').eq('id', pageId).maybeSingle();
@@ -1556,26 +1517,26 @@ export class SupabaseWorkRepository extends WorkRepository {
         if (error) throw new Error(`漫画页图片替换失败：${error.message}`);
       },
     });
-    return this.getById(comicId);
+    // FINAL16.3-SIMPLE：轻量返回 pages（不回读全 work）。
+    return { id: comicId, pages: await this._readComicPagesOrdered(comicId) };
   }
 
   /**
-   * C3：替换单张作品多图（repaint work_images.media_asset_id；旧资产 + Storage 文件保留，不物理删除）。
-   * 原位替换：保留 work_images.id 与 sort_order，仅改 media_asset_id（P0-12/13/14 位置稳定）。
-   * 继承作品公开意图（P0-6 / P0-21）：已公开作品替换也发布新图，草稿保持 private。
+   * C3/FINAL16.3-SIMPLE：替换单张作品多图（repaint work_images.media_asset_id；旧资产 + Storage 文件保留，不物理删除）。
+   * 原位替换：保留 work_images.id 与 sort_order，仅改 media_asset_id。
+   * 轻量返回新图（含稳定 id），UI 本地原位替换，禁止完整 getById。
    * @param {string} imageId work_images.id（稳定身份，非 URL；P0-11）
    * @param {File} file
    */
   async replaceWorkImage(imageId, file) {
     const sb = await this._requireWritableClient();
-    // 先读该图所属 work_id 与当前公开状态
+    // 先读该图所属 work_id
     const { data: row, error: qe } = await sb.from('work_images').select('id, work_id').eq('id', imageId).maybeSingle();
     if (qe) throw new Error(`作品图片读取失败：${qe.message}`);
     if (!row) throw new Error('作品图片不存在');
     const workId = row.work_id;
-    const autoPublish = await this._parentIsPublic('work', workId);
     const res = await this._uploadAndLink(file, {
-      parentType: 'work', parentId: workId, autoPublish,
+      parentType: 'work', parentId: workId,
       linkFn: async (assetId, ctx) => {
         // P0-G：替换前捕获旧 media_asset_id，失败恢复原位（原位替换、A B C 不变）
         const { data: old } = await sb.from('work_images').select('media_asset_id').eq('id', imageId).maybeSingle();
@@ -1588,17 +1549,16 @@ export class SupabaseWorkRepository extends WorkRepository {
         if (error) throw new Error(`作品图片替换失败：${error.message}`);
       },
     });
-    return this.getById(workId);
+    // FINAL16.3-SIMPLE：轻量返回新图（含稳定 id），UI 本地原位替换，禁止完整 getById。
+    return { id: workId, image: { id: imageId, assetId: res.assetId, url: res.url, bucket: res.bucket, path: res.key } };
   }
 
-  /** C3：替换证书图片（repaint certificates.media_asset_id；旧资产 + Storage 文件保留，不物理删除；不改动结构化字段）。
-   *  P0-21 修正：证书维持「替换即发布」语义，但必须继承证书原公开意图——已公开证书替换才发布；
-   *  隐藏证书（is_public=false）替换后绝不自行公开（autoPublish = 证书当前 is_public）。 */
+  /** C3/FINAL16.3-SIMPLE：替换证书图片（repaint certificates.media_asset_id；旧资产 + Storage 文件保留，不物理删除；不改动结构化字段）。
+   *  轻量返回（不回读），供 UI 本地合并封面。 */
   async replaceCertificateImage(certId, file) {
     const sb = await this._requireWritableClient();
-    const autoPublish = await this._parentIsPublic('certificate', certId);
     const res = await this._uploadAndLink(file, {
-      parentType: 'certificate', parentId: certId, autoPublish,
+      parentType: 'certificate', parentId: certId,
       linkFn: async (assetId, ctx) => {
         // P0-G：替换前捕获旧 media_asset_id，失败恢复原位（证书图片不变）
         const { data: old } = await sb.from('certificates').select('media_asset_id').eq('id', certId).maybeSingle();
@@ -1610,7 +1570,8 @@ export class SupabaseWorkRepository extends WorkRepository {
         if (error) throw new Error(`证书图片替换失败：${error.message}`);
       },
     });
-    return this.getById(certId);
+    // FINAL16.3-SIMPLE：轻量返回（不回读），UI 本地合并证书封面。
+    return { id: certId, cover: res.url, coverBucket: res.bucket, coverPath: res.key, coverAssetId: res.assetId };
   }
 
   // —— Works 发布生命周期（item 2：草稿 / 发布 / 下架）——
@@ -1783,9 +1744,8 @@ export class SupabaseWorkRepository extends WorkRepository {
     return done;
   }
 
-  /** 发布作品：将其全部 private 媒体拷贝到 public（original + 全部 variants）+ 翻 canonical + works.is_public=true。
-   *  P0-E：多资产补偿——若任一资产发布失败，已成功的资产逐个反向恢复 DB canonical（unpublish）+ 删 public Storage，
-   *        并恢复 works.is_public 到发布前状态，确保绝不出现「DB 半 public / public Storage 已删」不一致。 */
+  /** FINAL16.3-SIMPLE 发布作品：仅翻 works.is_public=true（前置校验封面 / 漫画≥1页）。
+   *  不搬 Storage、不调 publish_asset RPC、不回读全 work；A 公开查询即时可见。 */
   async publishWork(workId) {
     // P0-9：防并发重复发布（双击竞态）——同一作品进行中直接拦截，仅 1 次有效写。
     if (this._publishInflight && this._publishInflight.has(workId)) {
@@ -1794,7 +1754,7 @@ export class SupabaseWorkRepository extends WorkRepository {
     this._publishInflight = this._publishInflight || new Set();
     this._publishInflight.add(workId);
     try {
-      const sb = await this._requireAdmin(); // P0-3：顶层一次管理员校验，内部复用
+      const sb = await this._requireAdmin(); // P0-3：顶层一次管理员校验
       // P0-8：发布完整性检查（插画/油画至少有效封面；漫画至少封面 + 1 页，避免发布半成品导致 A 端断图/空专题）。
       const { data: wrow, error: we } = await sb.from('works').select('id, type, cover_asset_id, is_public').eq('id', workId).maybeSingle();
       if (we) throw new Error(`works 读取失败：${we.message}`);
@@ -1805,29 +1765,11 @@ export class SupabaseWorkRepository extends WorkRepository {
         if (pe) throw new Error(`漫画页读取失败：${pe.message}`);
         if (!pages || pages.length === 0) throw new Error('发布失败：漫画至少需要 1 页，请先添加漫画页再发布');
       }
-      const wasPublic = !!wrow.is_public;
-      // P0-3：同 work 前缀只算一次
-      const prefix = await this._parentPublishPrefix('work', workId);
-      try {
-        await this._publishWorkAssets(workId, sb, prefix);
-        // P0-五：最终就绪校验（禁止无条件 works.update is_public 覆盖 RPC 真实 readiness 判断）
-        const readiness = await this._verifyWorkPublicReadiness(workId);
-        if (!readiness.ok) throw new Error(`发布就绪校验未通过：${readiness.error}`);
-        // 仅当确为全部公开且尚未置位时稳妥置位（RPC 通常已置位，避免强覆盖 false）
-        const { data: cur, error: ce } = await sb.from('works').select('is_public').eq('id', workId).maybeSingle();
-        if (ce) throw new Error(`works 读取失败：${ce.message}`);
-        if (cur && cur.is_public !== true) {
-          const { error } = await sb.from('works').update({ is_public: true }).eq('id', workId);
-          if (error) throw new Error(`作品发布失败：${error.message}`);
-        }
-      } catch (e) {
-        // 资产级补偿已在 _publishWorkAssets 内完成；此处仅需恢复 works.is_public 原态
-        try { await sb.from('works').update({ is_public: wasPublic }).eq('id', workId); }
-        catch (err) { /* 尽力恢复 */ }
-        throw e;
-      }
-      // P0-6：返回最新 work（workEdit 可直接使用，避免再 getById）
-      return this.getById(workId);
+      // FINAL16.3-SIMPLE：仅置位 is_public=true，不搬 Storage、不调 publish RPC。
+      const { error } = await sb.from('works').update({ is_public: true }).eq('id', workId);
+      if (error) throw new Error(`作品发布失败：${error.message}`);
+      // 轻量返回，UI 本地合并公开状态，禁止完整 getById。
+      return { id: workId, public: true };
     } finally {
       this._publishInflight.delete(workId);
     }
@@ -1904,10 +1846,8 @@ export class SupabaseWorkRepository extends WorkRepository {
     return done;
   }
 
-  /** 下架作品：翻 works.is_public=false；逐个 unpublish_asset（public canonical → private staging，original + 全部 variants）+ 清 public 拷贝。
-   *  P0-五：下架后混合 bucket 检测（防止 original private 但 variant 仍 public 残留）。
-   *  P0-四：多资产补偿——若任一资产下架失败，已成功的资产逐个反向恢复 public canonical + Storage，恢复 works.is_public 原态，
-   *        绝不出现「DB 指向刚被清掉的 staging 对象」。destructive physical delete 仍禁用。 */
+  /** FINAL16.3-SIMPLE 下架作品：仅翻 works.is_public=false。
+   *  不搬 Storage、不调 unpublish_asset RPC、不回读全 work；A 公开查询即时消失。 */
   async unpublishWork(workId) {
     if (this._unpublishInflight && this._unpublishInflight.has(workId)) {
       throw new Error('该作品正在下架中，请稍候重试');
@@ -1919,35 +1859,20 @@ export class SupabaseWorkRepository extends WorkRepository {
       const { data: wrow, error: we } = await sb.from('works').select('id, is_public').eq('id', workId).maybeSingle();
       if (we) throw new Error(`works 读取失败：${we.message}`);
       if (!wrow) throw new Error('下架失败：作品不存在');
-      const wasPublic = !!wrow.is_public;
-      const prefix = await this._parentPublishPrefix('work', workId);
-      try {
-        await this._unpublishWorkAssets(workId, sb, prefix);
-        // P0-五：混合 bucket 检测（防止 original private 但 variant 仍 public 残留）
-        const mix = await this._verifyWorkNoMixedBucket(workId);
-        if (!mix.ok) throw new Error(`下架混合状态检测未通过：${mix.error}`);
-        const { data: cur, error: ce } = await sb.from('works').select('is_public').eq('id', workId).maybeSingle();
-        if (ce) throw new Error(`works 读取失败：${ce.message}`);
-        if (cur && cur.is_public !== false) {
-          const { error } = await sb.from('works').update({ is_public: false }).eq('id', workId);
-          if (error) throw new Error(`作品下架失败：${error.message}`);
-        }
-      } catch (e) {
-        // 资产级补偿已在 _unpublishWorkAssets 内完成；此处仅需恢复 works.is_public 原态
-        try { await sb.from('works').update({ is_public: wasPublic }).eq('id', workId); }
-        catch (err) { /* 尽力恢复 */ }
-        throw e;
-      }
-      // P0-6：返回最新 work（workEdit 可直接使用，避免再 getById）
-      return this.getById(workId);
+      // FINAL16.3-SIMPLE：仅置位 is_public=false，不搬 Storage、不调 unpublish RPC。
+      const { error } = await sb.from('works').update({ is_public: false }).eq('id', workId);
+      if (error) throw new Error(`作品下架失败：${error.message}`);
+      // 轻量返回，UI 本地合并公开状态，禁止完整 getById。
+      return { id: workId, public: false };
     } finally {
       this._unpublishInflight.delete(workId);
     }
   }
 
   // —— 真实删除（AB 模型：B 后台必须真正支持删）——
-  // 安全纪律：仅删除「逻辑记录」（works / work_images / comic_pages / certificates 行），
-  // 底层 Storage 文件与 media_assets 行一律保留（private + public 双份备份不物理销毁），
+  // FINAL16.3-SIMPLE 安全纪律：单次删除 = 管理员校验一次 + 数据库操作
+  // （is_public=false 先行（失败即中止，绝不继续）→ 删 work_images → 删 comic_pages → 删 works 主记录）。
+  // 不搬 Storage、不物理删除底层 media_assets/Storage（private+public 双份保留备份），
   // 保证：A 前台该作品立即消失（无死链/幽灵记录），但源媒体可后续手动找回。
   // 所有删除均经 is_admin() 守卫（非管理员由 Supabase 后端拒绝）。
 
@@ -1958,12 +1883,13 @@ export class SupabaseWorkRepository extends WorkRepository {
     const { data: wrow, error: we } = await sb.from('works').select('id, type, is_public').eq('id', id).maybeSingle();
     if (we) throw new Error(`works 读取失败：${we.message}`);
     if (wrow) {
-      // P0-4：若已公开，必须先安全下架；下架失败则 ABORT（绝不吞错后继续删除，
-      // 否则公开端会残留孤儿引用 / 断图 / 仍可访问的不一致状态）。
+      // FINAL16.3-SIMPLE：先置 is_public=false（失败即中止，绝不在仍可公开时删主记录，
+      // 否则公开端会残留孤儿引用 / 断图）；不搬 Storage、不调 unpublish RPC。
       if (wrow.is_public) {
-        await this.unpublishWork(id);
+        const { error: ue } = await sb.from('works').update({ is_public: false }).eq('id', id);
+        if (ue) throw new Error(`作品下架（置非公开）失败：${ue.message}`);
       }
-      // 删关联行（work_images / comic_pages），再删 works 主记录。
+      // 删关联行（work_images / comic_pages），再删 works 主记录（同一会话，无 Storage 传输）。
       const { error: de1 } = await sb.from('work_images').delete().eq('work_id', id);
       if (de1) throw new Error(`作品图片关联删除失败：${de1.message}`);
       const { error: de2 } = await sb.from('comic_pages').delete().eq('work_id', id);
@@ -2001,10 +1927,11 @@ export class SupabaseWorkRepository extends WorkRepository {
     // P0-11：以稳定 work_images.id 为身份删除（不再用 URL 匹配）。
     // P0-C：调用原子 RPC（同一事务内：校验管理员 → 校验归属 → 删除目标关联 → 按删除前相对顺序
     //   连续规范化 sort_order，media_asset_id / alt_text 保持原值不变）。绝不完整 upsert、绝不其它图错位。
+    // FINAL16.3-SIMPLE：返回轻量结果（不回读），UI 本地删除该稳定 id + 重规范化本地 sortOrder。
     const { data, error } = await sb.rpc('remove_work_image_and_reorder', { p_work_id: workId, p_image_id: imageId });
     if (error) throw new Error(`作品图片删除失败（服务端）：${this._rpcFail({ error }, '作品图片删除失败（服务端未返回明细）')}`);
     if (!data || !data.ok) throw new Error(`作品图片删除失败：${(data && data.error) || '作品图片删除失败（未知）'}`);
-    return this.getById(workId);
+    return { id: workId, ok: true };
   }
 
   async resetDemo() {

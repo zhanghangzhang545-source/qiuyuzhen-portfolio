@@ -13,23 +13,23 @@
   <meta name="twitter:card" content="summary_large_image" />
   <meta property="og:image" content="https://zhanghangzhang545-source.github.io/qiuyuzhen-portfolio/assets/comic/yoyogi2026/cover.jpg" />
   <meta name="twitter:image" content="https://zhanghangzhang545-source.github.io/qiuyuzhen-portfolio/assets/comic/yoyogi2026/cover.jpg" />
-  <!-- FINAL16.2-A：连接预热（仅预热 origin，不暴露任何 secret / key） -->
-  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
-  <link rel="dns-prefetch" href="https://cdn.jsdelivr.net" />
+  <!-- FINAL16.3-SIMPLE：连接预热（仅预热 Supabase origin，不暴露任何 secret / key；jsDelivr 已移除，SDK 改本地 vendor 静态加载） -->
   <link rel="preconnect" href="https://odaxfnupwtqkrgblzmat.supabase.co" crossorigin />
   <link rel="dns-prefetch" href="https://odaxfnupwtqkrgblzmat.supabase.co" />
-  <link rel="stylesheet" href="src/styles/tokens.css?v=20260828-final16.2.1" />
-  <link rel="stylesheet" href="src/styles/base.css?v=20260828-final16.2.1" />
-  <link rel="stylesheet" href="src/styles/components.css?v=20260828-final16.2.1" />
-  <link rel="stylesheet" href="src/styles/pages.css?v=20260828-final16.2.1" />
-  <link rel="stylesheet" href="src/styles/visual-id.css?v=20260828-final16.2.1" />
-  <link rel="stylesheet" href="src/styles/responsive.css?v=20260828-final16.2.1" />
+  <link rel="stylesheet" href="src/styles/tokens.css?v=20260828-final16.3-simple" />
+  <link rel="stylesheet" href="src/styles/base.css?v=20260828-final16.3-simple" />
+  <link rel="stylesheet" href="src/styles/components.css?v=20260828-final16.3-simple" />
+  <link rel="stylesheet" href="src/styles/pages.css?v=20260828-final16.3-simple" />
+  <link rel="stylesheet" href="src/styles/visual-id.css?v=20260828-final16.3-simple" />
+  <link rel="stylesheet" href="src/styles/responsive.css?v=20260828-final16.3-simple" />
   <script>window.__FORMAL_DEPLOY__=true;</script>
 </head>
 <body>
   <header id="nav-root"></header>
   <main id="app"></main>
   <footer id="footer-root"></footer>
-  <script type="module" src="src/main.js?v=20260828-final16.2.1"></script>
+  <!-- FINAL16.3-SIMPLE：本地 vendor 化 Supabase SDK（固定版本 2.112.3 UMD，浏览器全局 window.supabase），彻底消除 jsDelivr 运行时依赖 -->
+  <script defer src="vendor/supabase-js@2.112.3.umd.js"></script>
+  <script type="module" src="src/main.js?v=20260828-final16.3-simple"></script>
 </body>
 </html>

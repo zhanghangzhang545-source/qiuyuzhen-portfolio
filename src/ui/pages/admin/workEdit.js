@@ -181,8 +181,17 @@ export async function adminWorkEditView(params) {
         try {
           toast('正在上传作品图片…'); // P0-8：长操作立即反馈
           const updated = await repo.addWorkImage(existing.id, file);
-          imagesState.length = 0;
-          _metaFromWork(updated).forEach((m) => imagesState.push(m));
+          // FINAL16.3-SIMPLE：本地追加新图（稳定 id 来自服务端返回，避免完整 getById）。
+          if (updated && updated.image) {
+            imagesState.push({
+              id: updated.image.id,
+              assetId: updated.image.assetId ?? null,
+              sortOrder: imagesState.length + 1,
+              url: updated.image.url,
+              bucket: updated.image.bucket ?? null,
+              path: updated.image.path ?? null,
+            });
+          }
           renderImages();
           Object.assign(existing, updated);
         } catch (err) {
@@ -220,9 +229,10 @@ export async function adminWorkEditView(params) {
   let imgBusy = false; // P0-28：图片区异步操作期间统一禁用交互，防双击/重复请求
   async function renderImages() {
     imgListWrap.innerHTML = '';
-    for (let i = 0; i < imagesState.length; i++) {
-      const meta = imagesState[i];
-      const src = await adminPreviewSrc(meta.url, meta.bucket, meta.path);
+    // #8：并行取得所有预览 URL（signed URL 自身有内存缓存），最后严格按 imagesState 原顺序渲染（不再串行 await）。
+    const srcs = await Promise.all(imagesState.map((m) => adminPreviewSrc(m.url, m.bucket, m.path)));
+    imagesState.forEach((meta, i) => {
+      const src = srcs[i];
       const ctrls = [];
       const setRowBusy = (on) => ctrls.forEach((c) => { if (c) c.disabled = on; });
       const move = async (from, to) => {
@@ -234,19 +244,19 @@ export async function adminWorkEditView(params) {
         [order[from], order[to]] = [order[to], order[from]];
         imgBusy = true; setRowBusy(true);
         try {
-          // P0-11：以稳定 id 排序，不再用 URL
+          // P0-11：以稳定 id 排序，不再用 URL；FINAL16.3-SIMPLE：本地重排（不回读）。
           const updated = await repo.adjustImageSort(existing.id, order.map((m) => m.id));
-          imagesState.length = 0;
-          _metaFromWork(updated).forEach((m) => imagesState.push(m));
+          imagesState.length = 0; order.forEach((m) => imagesState.push(m)); // 本地重排，保持相对顺序
           Object.assign(existing, updated);
           renderImages();
+          imgBusy = false; // 操作完成释放忙锁（重建后的新控件本身已启用）
           toast('顺序已更新');
         } catch (err) {
           toast(`排序失败：${err.message || err}`);
           setRowBusy(false); imgBusy = false;
         }
       };
-      // C3：原位替换单图（repaint media_asset_id；保留位置，P0-12/13/14）
+      // C3/FINAL16.3-SIMPLE：原位替换单图（repaint media_asset_id；保留位置，P0-12/13/14）；本地原位替换（不回读）。
       const replaceCtl = mediaUploadControl({
         label: '替换', showPreview: false,
         onUpload: async (file) => {
@@ -255,10 +265,16 @@ export async function adminWorkEditView(params) {
           imgBusy = true; setRowBusy(true);
           try {
             const updated = await repo.replaceWorkImage(meta.id, file);
-            imagesState.length = 0;
-            _metaFromWork(updated).forEach((m) => imagesState.push(m));
+            // 本地原位替换（稳定 id 不变，仅刷 URL/bucket/path）
+            if (updated && updated.image) {
+              const idx = imagesState.findIndex((m) => m.id === updated.image.id);
+              if (idx >= 0) {
+                imagesState[idx] = { ...imagesState[idx], url: updated.image.url, bucket: updated.image.bucket ?? null, path: updated.image.path ?? null, assetId: updated.image.assetId ?? null };
+              }
+            }
             Object.assign(existing, updated);
             renderImages();
+            imgBusy = false; // 操作完成释放忙锁
             toast('已替换该图片');
           } catch (err) {
             toast(`替换失败：${err.message || err}`);
@@ -276,15 +292,17 @@ export async function adminWorkEditView(params) {
         imgDelStatus.textContent = '删除中…';
         imgDelStatus.className = 'form-status form-status--saving';
         try {
-          // P0-11：以稳定 id 删除，不再用 URL
+          // P0-11：以稳定 id 删除，不再用 URL；FINAL16.3-SIMPLE：本地删除该稳定 id + 重规范化本地 sortOrder（不回读）。
           const updated = await repo.removeWorkImage(existing.id, meta.id);
-          imagesState.length = 0;
-          _metaFromWork(updated).forEach((m) => imagesState.push(m));
+          const idx = imagesState.findIndex((m) => m.id === meta.id);
+          if (idx >= 0) imagesState.splice(idx, 1);
+          imagesState.forEach((m, k) => { m.sortOrder = k + 1; }); // 本地连续规范化
           Object.assign(existing, updated);
           imgDelStatus.textContent = '删除成功';
           imgDelStatus.className = 'form-status form-status--success';
           toast('已删除该图片');
           renderImages();
+          imgBusy = false; // 操作完成释放忙锁
         } catch (err) {
           imgDelStatus.textContent = `删除失败：${err.message || err}`;
           imgDelStatus.className = 'form-status form-status--failure';
@@ -301,7 +319,7 @@ export async function adminWorkEditView(params) {
         replaceCtl.el,
         delBtn,
       ]));
-    }
+    });
   }
   renderImages();
 

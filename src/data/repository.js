@@ -316,7 +316,8 @@ export class MockWorkRepository extends WorkRepository {
     // 剩余页 order 连续重排（page_number 语义在 Mock 以 order 表达，一并顺延）。
     w.pages = w.pages.map((p, i) => ({ ...p, order: i + 1 }));
     this._save();
-    return this._clone(w);
+    // FINAL16.3-SIMPLE：轻量返回 pages（与 Supabase 形态一致）。
+    return { ok: true, pages: this._clone(w).pages };
   }
 
   async removeWorkImage(workId, imageId) {
@@ -326,7 +327,8 @@ export class MockWorkRepository extends WorkRepository {
     if (!found || found.w.id !== workId) throw new Error('未找到匹配的作品图片（ID 无匹配）');
     found.w.images.splice(found.idx, 1);
     this._save();
-    return this._clone(found.w);
+    // FINAL16.3-SIMPLE：轻量返回（不回读），UI 本地删除该稳定 id + 重规范化本地 sortOrder。
+    return { id: workId, ok: true };
   }
 
   async replaceWorkImage(imageId, file) {
@@ -337,7 +339,8 @@ export class MockWorkRepository extends WorkRepository {
     const r = await this._mockUpload(file);
     found.w.images[found.idx] = r.url;
     this._save();
-    return this._clone(found.w);
+    // FINAL16.3-SIMPLE：轻量返回新图（含稳定 id），UI 本地原位替换。
+    return { id: found.w.id, image: { id: imageId, assetId: null, url: r.url, bucket: null, path: null } };
   }
 
   async reorderComicPages(comicId, orderedIds) {
@@ -425,7 +428,8 @@ export class MockWorkRepository extends WorkRepository {
     const r = await this._mockUpload(file);
     w.cover = r.url;
     this._save();
-    return this._clone(w);
+    // FINAL16.3-SIMPLE：轻量返回（与 Supabase 形态一致），UI 本地合并封面。
+    return { id: workId, cover: r.url, coverBucket: null, coverPath: null, coverAssetId: null };
   }
 
   async addWorkImage(workId, file) {
@@ -437,7 +441,9 @@ export class MockWorkRepository extends WorkRepository {
     if (!Array.isArray(w.images)) w.images = [];
     w.images.push(r.url);
     this._save();
-    return this._clone(w);
+    // FINAL16.3-SIMPLE：轻量返回新图（含稳定 id），UI 本地追加（与 Supabase 形态一致）。
+    const newId = `${workId}__${w.images.length - 1}`;
+    return { id: workId, image: { id: newId, assetId: null, url: r.url, bucket: null, path: null, sortOrder: null } };
   }
 
   async adjustImageSort(workId, orderedImageIds) {
@@ -454,7 +460,8 @@ export class MockWorkRepository extends WorkRepository {
     });
     w.images = idxs.map((i) => w.images[i]);
     this._save();
-    return this._clone(w);
+    // FINAL16.3-SIMPLE：轻量返回（不回读），UI 本地重排。
+    return { id: workId, ok: true };
   }
 
   async addComicPage(comicId, file) {
@@ -466,7 +473,8 @@ export class MockWorkRepository extends WorkRepository {
     const nextOrder = w.pages.length + 1;
     w.pages.push({ id: `cp-mock-${Date.now().toString(36)}-${w.pages.length}`, order: nextOrder, image: r.url });
     this._save();
-    return this._clone(w);
+    // FINAL16.3-SIMPLE：轻量返回 pages（与 Supabase 形态一致）。
+    return { id: comicId, pages: this._clone(w).pages };
   }
 
   async replaceComicPageImage(pageId, file) {
@@ -481,9 +489,9 @@ export class MockWorkRepository extends WorkRepository {
     const r = await this._mockUpload(file);
     target.image = r.url; // 旧图以 dataURL 形式被直接覆盖（Mock 无物理文件，等价保留语义）
     this._save();
-    // 返回所属漫画（依据页面找到的父作品）
+    // 返回所属漫画（依据页面找到的父作品）；FINAL16.3-SIMPLE：轻量返回 pages。
     const parent = this._works.find((w) => (w.pages || []).some((pp) => pp.id === pageId));
-    return this._clone(parent);
+    return { id: parent.id, pages: this._clone(parent).pages };
   }
 
   async replaceCertificateImage(certId, file) {
@@ -493,7 +501,8 @@ export class MockWorkRepository extends WorkRepository {
     const r = await this._mockUpload(file);
     c.cover = r.url;
     this._save();
-    return this._clone(c);
+    // FINAL16.3-SIMPLE：轻量返回（与 Supabase 形态一致），UI 本地合并证书封面。
+    return { id: certId, cover: r.url, coverBucket: null, coverPath: null, coverAssetId: null };
   }
 
 

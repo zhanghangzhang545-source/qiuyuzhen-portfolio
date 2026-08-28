@@ -120,7 +120,12 @@ export function mediaUploadControl(opts = {}) {
           toast(v.error);
           continue;
         }
-        setState('uploading', total > 1 ? `正在处理 ${i + 1}/${total}…` : '上传中…');
+        // #12：上传前/上传中显示文件名 + 文件大小；超过 8MB 额外提示「图片较大，上传可能需要较长时间」。
+        const sizeMB = file.size / 1024 / 1024;
+        const sizeLabel = `${file.name}（${(sizeMB).toFixed(1)}MB）`;
+        const bigHint = file.size > 8 * 1024 * 1024 ? '；图片较大，上传可能需要较长时间' : '';
+        // #10：当前 SDK 不暴露上传进度，统一显示「正在上传…」（无真实百分比），并附文件名+大小（#12）。
+        setState('uploading', `正在上传 ${sizeLabel}${bigHint}…`);
         try {
           await onUpload(file);
           // 单张模式：上传完成立即显示真实本地预览（blob URL），不依赖公开可读；F5 后由后台回读 signed URL 兜底。

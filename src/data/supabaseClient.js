@@ -8,13 +8,14 @@
 //   ✅ 真实写权限由 RLS + is_admin() 守卫；客户端即便拿到 publishable key，
 //      非白名单用户的所有写请求都会被 RLS 拒绝。
 //
-// 本地 ESM 静态站点（无打包器）下，@supabase/supabase-js 经由浏览器原生 ESM CDN 引入；
-// 锁定具体版本（固定 tag），避免 CDN 漂移导致行为变化。
-// 若日后引入打包器，可改为 `import { createClient } from '@supabase/supabase-js';`
+// FINAL16.3-SIMPLE：@supabase/supabase-js 已本地 vendor 化（见 index.html 的
+// vendor/supabase-js@2.112.3.umd.js defer 脚本，浏览器全局 window.supabase）。
+// 不再运行时从 jsDelivr 动态 import，彻底消除中国大陆/移动网络 CDN 波动对后台的影响。
+// 固定版本 2.112.3（UMD 自包含，语义不变）。若日后引入打包器可改回 ESM import。
 // ============================================================
 
-// 固定版本，避免 CDN 漂移
-const SUPABASE_JS_CDN = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.3/+esm';
+// 固定版本，与 vendor 文件一致（仅供诊断/日志显示，不再用于运行时加载）
+const SUPABASE_JS_VERSION = '2.112.3';
 
 let _clientPromise = null;
 
@@ -45,10 +46,20 @@ export async function getSupabase() {
     );
   }
 
-  const mod = await import(/* @vite-ignore */ SUPABASE_JS_CDN);
-  const createClient = mod.createClient;
+  // 本地 vendor 全局（index.html 中的 defer 脚本应在本模块执行前已就绪）
+  let createClient = globalThis.supabase && globalThis.supabase.createClient;
   if (typeof createClient !== 'function') {
-    throw new Error('Supabase JS 加载异常：createClient 不可用（CDN 可达性？）。');
+    // 兜底：极少数情况下 defer 脚本尚未就绪，短暂等待后再探测一次
+    for (let i = 0; i < 10 && typeof createClient !== 'function'; i++) {
+      await new Promise((r) => setTimeout(r, 50));
+      createClient = globalThis.supabase && globalThis.supabase.createClient;
+    }
+  }
+  if (typeof createClient !== 'function') {
+    throw new Error(
+      'Supabase JS 尚未就绪：本地 vendor/supabase-js@' + SUPABASE_JS_VERSION +
+      '.umd.js 未能提供 window.supabase.createClient（文件缺失或被拦截？）。'
+    );
   }
 
   _clientPromise = createClient(url, key, {
