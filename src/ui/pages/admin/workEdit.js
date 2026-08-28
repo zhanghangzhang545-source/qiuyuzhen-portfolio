@@ -52,6 +52,11 @@ export async function adminWorkEditView(params) {
   const existing = params.id ? await repo.getById(params.id) : null;
   const isEdit = !!existing;
 
+  // FINAL16.1：新建态（!isEdit）媒体暂存于浏览器内存（pendingCoverFile / pendingImageFiles[]），
+  // 仅 blob URL 本地预览，绝不提前写 Supabase；创建成功后再自动上传。
+  const pendingImageFiles = []; // [{ file, url }]
+  let pendingCoverFile = null;
+
   // C3：封面 / 多图上传已在下方（coverUpload / imgUpload / imagesSection）真实开放，
   // 经 services.storage + repo 写入（含管理闸门与失败回滚）。两种模式均可用。
 
@@ -81,27 +86,32 @@ export async function adminWorkEditView(params) {
   }
   if (cover.value) renderCover();
 
-  // C3：封面上传控件（替换封面）。上传走 services.storage + repo.uploadWorkCover（含管理闸门 + 回滚）。
+  // C3：封面上传控件。编辑态=替换封面（写 Supabase）；新建态=选择封面（仅存内存 + blob 预览）。
   const coverUpload = mediaUploadControl({
-    label: '替换封面',
+    label: isEdit ? '替换封面' : '选择封面图片',
     onUpload: async (file) => {
-      // 两阶段创建：新作品尚未生成 id 前，严禁访问 existing.id，转中文提示
-      if (!existing || !existing.id) {
-        const msg = '作品尚未创建，请先保存基础信息后再上传图片。';
-        toast(msg);
-        throw new Error(msg);
-      }
-      try {
-        const updated = await repo.uploadWorkCover(existing.id, file);
-        cover.value = updated.cover;
-        if (updated.coverBucket) coverMeta.bucket = updated.coverBucket;
-        if (updated.coverPath) coverMeta.path = updated.coverPath;
-        Object.assign(existing, updated);
-        // 即时本地预览（blob）+ 后台 signed URL 兜底预览（F5 后仍能显示）
-        if (file && globalThis.URL && URL.createObjectURL) coverUpload.setPreview(URL.createObjectURL(file));
-        await renderCover();
-      } catch (err) {
-        throw new Error('封面上传失败，请检查网络后重试。');
+      if (isEdit) {
+        // 两阶段创建：新作品尚未生成 id 前，严禁访问 existing.id，转中文提示
+        if (!existing || !existing.id) {
+          const msg = '作品尚未创建，请先保存基础信息后再上传图片。';
+          toast(msg);
+          throw new Error(msg);
+        }
+        try {
+          const updated = await repo.uploadWorkCover(existing.id, file);
+          cover.value = updated.cover;
+          if (updated.coverBucket) coverMeta.bucket = updated.coverBucket;
+          if (updated.coverPath) coverMeta.path = updated.coverPath;
+          Object.assign(existing, updated);
+          // 即时本地预览（blob）+ 后台 signed URL 兜底预览（F5 后仍能显示）
+          if (file && globalThis.URL && URL.createObjectURL) coverUpload.setPreview(URL.createObjectURL(file));
+          await renderCover();
+        } catch (err) {
+          throw new Error('封面上传失败，请检查网络后重试。');
+        }
+      } else {
+        // 新建态：仅存入内存 + 组件自动 blob 预览，绝不提前写 Supabase
+        pendingCoverFile = file;
       }
     },
     onError: () => {},
@@ -158,25 +168,52 @@ export async function adminWorkEditView(params) {
   const imgDelStatus = h('div', { class: 'form-status', 'aria-live': 'polite' });
   const imgUpload = mediaUploadControl({
     label: '添加作品图片',
+    showPreview: false, // 预览统一走下方 pendingImgListWrap / 编辑态 imgListWrap，避免控件内重复预览
     onUpload: async (file) => {
-      // 两阶段创建：新作品尚未生成 id 前，严禁访问 existing.id，转中文提示
-      if (!existing || !existing.id) {
-        const msg = '作品尚未创建，请先保存基础信息后再上传图片。';
-        toast(msg);
-        throw new Error(msg);
-      }
-      try {
-        const updated = await repo.addWorkImage(existing.id, file);
-        imagesState.length = 0;
-        _metaFromWork(updated).forEach((m) => imagesState.push(m));
-        renderImages();
-        Object.assign(existing, updated);
-      } catch (err) {
-        throw new Error('作品图片上传失败，请检查网络后重试。');
+      if (isEdit) {
+        // 两阶段创建：新作品尚未生成 id 前，严禁访问 existing.id，转中文提示
+        if (!existing || !existing.id) {
+          const msg = '作品尚未创建，请先保存基础信息后再上传图片。';
+          toast(msg);
+          throw new Error(msg);
+        }
+        try {
+          const updated = await repo.addWorkImage(existing.id, file);
+          imagesState.length = 0;
+          _metaFromWork(updated).forEach((m) => imagesState.push(m));
+          renderImages();
+          Object.assign(existing, updated);
+        } catch (err) {
+          throw new Error('作品图片上传失败，请检查网络后重试。');
+        }
+      } else {
+        // 新建态：仅存入内存 + blob 预览，绝不提前写 Supabase
+        const url = (globalThis.URL && URL.createObjectURL) ? URL.createObjectURL(file) : null;
+        pendingImageFiles.push({ file, url });
+        renderPendingImages();
       }
     },
     onError: () => {},
   });
+  // 新建态：待上传图片本地预览列表（内存态，不写 Supabase；可逐个移除）
+  const pendingImgListWrap = h('div', { class: 'thumb-list' });
+  function renderPendingImages() {
+    pendingImgListWrap.innerHTML = '';
+    pendingImageFiles.forEach((item, i) => {
+      const thumb = h('div', { class: 'thumb' }, [
+        item.url ? imgEl(item.url, null, `图${i + 1}`) : h('div', { class: 'thumb__fail' }, '预览失败'),
+        h('button', { class: 'thumb__del', title: '移除这张待上传图片', type: 'button' }, '×'),
+      ]);
+      const del = thumb.querySelector('.thumb__del');
+      if (del) del.addEventListener('click', () => {
+        if (item.url && globalThis.URL && URL.revokeObjectURL) { try { URL.revokeObjectURL(item.url); } catch (_) { /* ignore */ } }
+        const idx = pendingImageFiles.indexOf(item);
+        if (idx >= 0) pendingImageFiles.splice(idx, 1);
+        renderPendingImages();
+      });
+      pendingImgListWrap.appendChild(thumb);
+    });
+  }
 
   let imgBusy = false; // P0-28：图片区异步操作期间统一禁用交互，防双击/重复请求
   async function renderImages() {
@@ -270,8 +307,9 @@ export async function adminWorkEditView(params) {
     h('label', { class: 'field__label' }, '作品图片（可上传 / 调整顺序 / 删除）'),
     imgListWrap,
     imgDelStatus,
-    // 两阶段创建：新作品尚未创建 id 前，只显示提示、不开真实上传操作
-    isEdit ? imgUpload.el : h('div', { class: 'notice' }, '请先填写作品基础信息并创建作品，创建成功后即可上传封面和作品图片。'),
+    // FINAL16.1：新建态也展示真实可点击上传入口 + 内存预览列表（不再用 notice 替代）
+    imgUpload.el,
+    pendingImgListWrap,
   ]);
 
   // —— 危险操作区（P0-3）：删除整个作品 ——
@@ -435,8 +473,34 @@ export async function adminWorkEditView(params) {
     setSaving(true);
     try {
       let saved;
-      if (isEdit) { saved = await repo.update(existing.id, payload); }
-      else { saved = await repo.create(payload); }
+      if (isEdit) {
+        saved = await repo.update(existing.id, payload);
+      } else {
+        saved = await repo.create(payload);
+        // ===== FINAL16.1：新建态自动上传 pending 媒体（不重复创建作品；失败保留已成功图片并进入编辑页）=====
+        const isComicType = typeSel.value === 'comic';
+        let mediaFailed = false;
+        // 1) 封面（漫画 / 非漫画都先传封面）
+        if (pendingCoverFile) {
+          try { await repo.uploadWorkCover(saved.id, pendingCoverFile); }
+          catch (e) { mediaFailed = true; console.error('[new] 封面上传失败', e); }
+        }
+        // 2) 非漫画：按客户选择顺序逐张 await 上传，禁止 Promise.all（避免顺序被上传速度打乱）
+        if (!isComicType) {
+          for (const item of pendingImageFiles) {
+            try { await repo.addWorkImage(saved.id, item.file); }
+            catch (e) { mediaFailed = true; console.error('[new] 图片上传失败', e); }
+          }
+        }
+        isDirty = false;
+        setStatus('success', '已新增作品');
+        toast('已新增作品');
+        if (mediaFailed) toast('作品已创建，但部分图片上传失败，请补传未完成图片');
+        // 无论媒体是否部分失败，均进入已创建作品编辑页（已成功图片保留）；漫画进入漫画页管理
+        if (isComicType) location.hash = `#/admin/comic/${saved.id}/pages`;
+        else location.hash = `#/admin/work/${saved.id}/edit`;
+        return;
+      }
       isDirty = false;
       setStatus('success', isEdit ? '已保存修改' : '已新增作品');
       toast(isEdit ? '已保存修改' : '已新增作品');
@@ -461,7 +525,7 @@ export async function adminWorkEditView(params) {
       h('div', { class: 'field' }, [h('label', { class: 'field__label' }, '创作年份'), yearI]),
       h('div', { class: 'field' }, [h('label', { class: 'field__label' }, '创作阶段'), stageI, stageList]),
     ]),
-    h('div', { class: 'field' }, [h('label', { class: 'field__label' }, '封面（可替换）'), coverPrev, isEdit ? coverUpload.el : h('div', { class: 'notice' }, '请先填写作品基础信息并创建作品，创建成功后即可上传封面和作品图片。')]),
+    h('div', { class: 'field' }, [h('label', { class: 'field__label' }, isEdit ? '封面（可替换）' : '封面（创建作品后上传）'), coverPrev, coverUpload.el]),
     imagesSection,
     dangerSection,
     h('div', { class: 'field' }, [h('label', { class: 'field__label' }, '标签（关键词，回车添加）'), tagsInput.el]),
