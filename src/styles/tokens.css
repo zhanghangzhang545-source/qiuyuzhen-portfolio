@@ -8,6 +8,7 @@
   --paper:        #F5F0E9;  /* 页面主背景，暖白 */
   --paper-2:      #EDE4D9;  /* 次级表面 / 区段底色 */
   --paper-3:      #E5D9C8;  /* 更深的米色块 */
+  --placeholder:  #EDE4D9;  /* 媒体帧中性占位底色（与 paper-2 同调，无网络依赖） */
   --espresso:     #221D17;  /* 深咖啡黑，用于暗场区块（页脚） */
   --espresso-2:   #2C241B;
 

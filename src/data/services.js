@@ -116,6 +116,8 @@ const REPO_METHODS = [
   'replaceComicPageImage', 'replaceCertificateImage', 'adjustImageSort',
   // Works 发布生命周期（item 2：草稿 / 发布 / 下架）
   'publishWork', 'unpublishWork',
+  // FINAL16.2-A：公开轻量读取（首页 / 作品库摘要，绝不 hydrate 全站媒体）
+  'getHomePayload', 'listPublicSummary',
 ];
 // 注意：isAuthed / user 必须「同步」返回（后台多处用 if(auth.isAuthed()) 同步判断），
 // 因此不进入异步代理；改为同步委托到底层 impl（未就绪时返回 false/null）。
@@ -194,12 +196,14 @@ export async function computeStats() {
  * 显式初始化数据层（在 main.js 尽早调用）。
  * 解析模式并设置 DATA_MODE；若正式模式且配置异常，仍由后续调用显式抛错，
  * 不会在此静默回 Mock（除「未配置」这种安全回退）。
+ *
+ * FINAL16.2-A：公开访问（A 前台）只确保公开 repo（首页/作品/关于只读数据）就绪，
+ * 不在此预先初始化后台 auth/storage —— 进入 #/admin/* 时由 router.before 按需加载，
+ * 避免公开访客无谓下载 Supabase Auth / Storage 相关实现。
  * @returns {Promise<'mock'|'supabase'>}
  */
 export async function initDataLayer() {
-  const mode = await resolveMode();
-  DATA_MODE.value = mode;
-  // 预先解析实现，便于后台 ensureSession / isAuthed 同步闸门在首屏前就绪
-  await Promise.all([repo._ensure(), auth._ensure(), storage._ensure()]);
-  return mode;
+  // 仅准备公开 repo（repo._ensure 内部已解析并设定 DATA_MODE）
+  await repo._ensure();
+  return DATA_MODE.value;
 }

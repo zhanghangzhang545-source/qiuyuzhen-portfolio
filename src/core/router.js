@@ -38,31 +38,50 @@ export class Router {
 
   _render(view, params, query, pattern) {
     const app = document.getElementById('app');
-    if (this.opts.before) this.opts.before(pattern, params, query);
-    const out = typeof view === 'function' ? view(params, query) : view;
-    Promise.resolve(out).then((node) => {
-      const resolved = typeof node === 'string' ? raw(node) : node;
-      app.innerHTML = '';
-      app.appendChild(resolved);
-      window.scrollTo(0, 0);
-      if (this.opts.after) this.opts.after(pattern, params, query);
-    }).catch((err) => {
-      // 统一显式错误态：视图渲染/reject 不得导致白屏。
-      // 正式模式（Supabase）下，真实读取失败必须显式呈现，禁止静默空白。
-      console.error('[router] 视图渲染失败：', err);
-      const msg = (err && err.message) ? err.message : String(err);
-      app.innerHTML = '';
-      app.appendChild(raw(
-        '<div class="container section">' +
-        '<div class="router-error">' +
-        '<h1 class="display">页面加载出错</h1>' +
-        '<p class="secondary">该页面在加载数据时出现问题。请检查网络后重试；若持续出现，请联系管理员。</p>' +
-        '<p class="router-error__detail"></p>' +
-        '</div></div>'
-      ));
-      const detail = app.querySelector('.router-error__detail');
-      if (detail) detail.textContent = msg;
-    });
+    if (!app) return;
+
+    // FINAL16.2-A：同步先渲染骨架占位，禁止白屏；页面框架（背景 + hero 占位）先稳定出现，
+    // 数据回来后再原位替换为真实内容。
+    const skeleton = this.opts.skeleton ? this.opts.skeleton(pattern, params, query) : null;
+    app.innerHTML = '';
+    if (skeleton) app.appendChild(skeleton);
+
+    const mount = () => {
+      const out = typeof view === 'function' ? view(params, query) : view;
+      Promise.resolve(out).then((node) => {
+        const resolved = typeof node === 'string' ? raw(node) : node;
+        // 原位替换骨架内容（首屏 hero 高度已由骨架预留，避免跳动）
+        app.innerHTML = '';
+        app.appendChild(resolved);
+        window.scrollTo(0, 0);
+        if (this.opts.after) this.opts.after(pattern, params, query);
+      }).catch((err) => this._renderError(app, err));
+    };
+
+    // before 可为同步或异步（后台路由在此按需确保 auth/storage）；
+    // 完成后挂载视图。失败显式呈现错误态，不白屏。
+    const beforeP = this.opts.before
+      ? Promise.resolve(this.opts.before(pattern, params, query))
+      : Promise.resolve();
+    beforeP.then(mount).catch((err) => this._renderError(app, err));
+  }
+
+  _renderError(app, err) {
+    // 统一显式错误态：视图渲染/reject 不得导致白屏。
+    // 正式模式（Supabase）下，真实读取失败必须显式呈现，禁止静默空白。
+    console.error('[router] 视图渲染失败：', err);
+    const msg = (err && err.message) ? err.message : String(err);
+    app.innerHTML = '';
+    app.appendChild(raw(
+      '<div class="container section">' +
+      '<div class="router-error">' +
+      '<h1 class="display">页面加载出错</h1>' +
+      '<p class="secondary">该页面在加载数据时出现问题。请检查网络后重试；若持续出现，请联系管理员。</p>' +
+      '<p class="router-error__detail"></p>' +
+      '</div></div>'
+    ));
+    const detail = app.querySelector('.router-error__detail');
+    if (detail) detail.textContent = msg;
   }
 }
 

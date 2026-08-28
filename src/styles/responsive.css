@@ -50,6 +50,10 @@
   .hero { display: block; min-height: 0; background: var(--paper); color: var(--ink); }
   .hero__media { position: static; height: auto; }
   .hero__img { width: 100%; height: auto; object-fit: initial; object-position: initial; }
+  /* 媒体帧：手机端 Hero 不再铺满固定高度，改为随图片自然高度 */
+  .media-frame--fill { height: auto; }
+  .media-frame--fill > img,
+  .media-frame--fill > picture { height: auto; object-fit: initial; object-position: initial; }
   .hero__scrim { display: none; }
   .hero__inner { position: static; padding: var(--s3) var(--pad-x) var(--s5); color: var(--ink); }
   .hero__copy { max-width: none; width: 100%; }

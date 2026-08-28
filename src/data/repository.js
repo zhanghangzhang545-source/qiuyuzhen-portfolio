@@ -140,6 +140,51 @@ export class MockWorkRepository extends WorkRepository {
     return this._clone(list);
   }
 
+  /**
+   * FINAL16.2-A：首页轻量摘要（Mock）。
+   * 返回公开非证书作品（基础字段 + 封面；images=[]、pages=[]）+ 全部证书；
+   * 仅 spotlight 漫画保留前 3 内页（绝不 hydrate 全站漫画）。
+   */
+  async getHomePayload() {
+    const all = this._clone(this._works).filter((w) => w.public !== false);
+    const certs = all
+      .filter((w) => w.type === 'certificate')
+      .map((w) => ({ ...w, images: [], imagesMeta: [], pages: [] }));
+    const works = all
+      .filter((w) => w.type !== 'certificate')
+      .map((w) => ({ ...w, images: [], imagesMeta: [], pages: [] }));
+    // spotlight 漫画：home_featured 且 type=comic 中 home_featured_order 最小者，仅取前 3 内页
+    const spotlight = works
+      .filter((w) => w.featured && w.type === 'comic')
+      .sort((a, b) => (a.homeFeaturedOrder || 0) - (b.homeFeaturedOrder || 0))[0] || null;
+    if (spotlight) {
+      const src = all.find((w) => w.id === spotlight.id);
+      spotlight.pages = (src.pages || []).slice(0, 3);
+    }
+    return { works, certs };
+  }
+
+  /**
+   * FINAL16.2-A：作品库轻量摘要（Mock，按类型）。
+   * 只返回基础字段 + 封面；comic 额外附代表页(首张) + 页数；不展开全站媒体。
+   * @param {string} [type] '' | 'illustration' | 'oil' | 'comic'
+   */
+  async listPublicSummary(type) {
+    const all = this._clone(this._works).filter((w) => w.public !== false && w.type !== 'certificate');
+    let works = all;
+    if (type && type !== '') works = all.filter((w) => w.type === type);
+    return works.map((w) => {
+      const c = { ...w, images: [], imagesMeta: [] };
+      if (w.type === 'comic') {
+        c.pageCount = (w.pages || []).length;
+        c.pages = (w.pages || []).slice(0, 1); // 代表页（首张）
+      } else {
+        c.pages = [];
+      }
+      return c;
+    });
+  }
+
   async create(work) {
     this._guardWrite();
     // #2 严格字段校验（写前抛错，无回退；与 Supabase 语义一致）

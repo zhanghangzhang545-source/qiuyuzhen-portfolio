@@ -67,7 +67,9 @@ export async function aboutView() {
   const CONTACT = A.contacts;
   const NEUTRAL_BIO = A.bio || '以插画与漫画为主要创作方向，关注角色、叙事与氛围表达。';
 
-  const all = await repo.filter({ publicOnly: true });
+  // FINAL16.2-A：关于页证书/作品计数只取轻量首页摘要（getHomePayload），
+  // 绝不 hydrate 全站媒体；证书/漫画/插画/油画均从 works 派生（与旧 filter 行为对齐）。
+  const { works: all } = await repo.getHomePayload();
   // 证书展示逻辑：仅展示「关于」荣誉区，且受 public 控制（public:false 的证书不在 About 出现）。
   // 证书不进入 Works 是由类型（栏目规则）决定，与其 public 无关。
   const certs = all.filter((w) => w.type === 'certificate' && w.public !== false);

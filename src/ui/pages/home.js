@@ -44,15 +44,15 @@ function topicHead(num, en, zh) {
 }
 
 export async function homeView() {
-  // 消除 N+1：仅取一次 list（含全部公开数据：works + certificates），
-  // 后续全部为本地内存过滤，不再重复发起全量请求。
-  const full = await repo.filter({ publicOnly: true });
+  // FINAL16.2-A：仅取首页所需轻量数据（公开摘要：works + 证书；仅 spotlight 漫画附前 3 内页），
+  // 绝不 hydrate 全站媒体（如 110 张漫画内页），显著减少首屏请求与传输量。
+  const { works } = await repo.getHomePayload();
   // P0-3：关于预告所需的姓名/拼音/简介/教育数全部读 aboutRepo（Mock 与 Supabase 同形状），绝不硬编码。
   const about = await aboutRepo.read();
-  const all = full.filter((w) => w.type !== 'certificate');
-  const featured = full.filter((w) => w.featured && w.public !== false);
-  // 证书单独从「公开完整数据」筛选，避免被上面排除 certificate 的 all 影响导致数量为 0
-  const certs = full.filter((w) => w.type === 'certificate' && w.public !== false);
+  const all = works.filter((w) => w.type !== 'certificate');
+  const featured = works.filter((w) => w.featured && w.public !== false);
+  // 证书：从首页 payload 取（与旧 full.filter 行为对齐，仅公开证书计入）
+  const certs = works.filter((w) => w.type === 'certificate' && w.public !== false);
 
   // 主视觉固定用《旅途》（i09）—— Hero 维持独立 Hero 契约，不纳入首页 SELECTED 数据驱动选择。
   // P0-25：零公开作品时 heroArt 可能为 null，必须显式兜底为 null 并在使用处做 null guard，禁止崩溃。
@@ -100,7 +100,7 @@ export async function homeView() {
   // —— 第一屏：深色，《旅途》为视觉底层（方向保留） ——
   // P0-25：heroArt 可能为空（零公开作品），null guard 后渲染中性占位，绝不访问 .cover/.title 崩溃。
   const heroImg = heroArt
-    ? imgEl(heroArt.cover, 'hero__img', heroArt.title, { eager: true, w: heroArt.coverW, h: heroArt.coverH, sizes: SZ.hero })
+    ? imgEl(heroArt.cover, 'hero__img', heroArt.title, { eager: true, high: true, fill: true, w: heroArt.coverW, h: heroArt.coverH, sizes: SZ.hero })
     : h('div', { class: 'hero__img hero__img--empty' });
   const hero = h('section', { class: 'hero' }, [
     h('div', { class: 'hero__media' }, heroImg),

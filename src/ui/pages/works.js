@@ -61,6 +61,8 @@ function comicRow(work, i = 0, eager = false) {
   const rep = work.pages && work.pages[0];
   const opt = (w, h) => ({ w, h, ...(eager ? { eager: true } : {}) });
   const num = String(i + 1).padStart(2, '0');
+  // 页数：优先用摘要返回的 pageCount（完整页数）；仅代表页 pages[0] 用于封面右侧缩略。
+  const pageCount = (work.pageCount != null) ? work.pageCount : (work.pages ? work.pages.length : 0);
   // 左侧辅助文字：年份 · 真实作品性质（来自 workNature，不硬编码）；页数移到右侧单独列
   const sub = [work.year ? String(work.year) : null, natureSub(work)].filter(Boolean).join(' · ');
   return h('a', { class: 'comic-row', href: `#/comic/${work.id}` }, [
@@ -70,7 +72,7 @@ function comicRow(work, i = 0, eager = false) {
       workLabel({ num, en: 'COMIC', title: work.title, sub }),
       work.intro ? h('p', { class: 'comic-row__intro' }, work.intro) : null,
     ]),
-    h('div', { class: 'comic-row__pages' }, `${work.pages.length}P →`),
+    h('div', { class: 'comic-row__pages' }, `${pageCount}P →`),
   ]);
 }
 
@@ -198,7 +200,9 @@ function buildPicks(comics, illus, oils) {
 
 export async function worksView(params, query) {
   const type = params.type || query.type || '';
-  const list = await repo.list();
+  // FINAL16.2-A：作品库轻量摘要读取（按类型），绝不 hydrate 全站媒体（如 110 张漫画内页）。
+  // 漫画仅附「代表页(首张) + 页数」，不展开全部内页；其余类型仅封面与基础字段。
+  const list = await repo.listPublicSummary(type);
   const years = [...new Set(list.map((w) => w.year).filter((y) => y != null && y !== ''))].sort((a, b) => b - a);
 
   const page = h('div', { class: 'container about-wrap section works-page' });

@@ -50,6 +50,20 @@ import { PUBLIC_BUCKET, PRIVATE_BUCKET } from './storage.supabase.js';
 const COVER_PREF_WIDTH = 1280;
 const PAGE_PREF_WIDTH = 1280;
 
+// —— FINAL16.2-A：会话内缓存（公开摘要数据：Home / Works Summary）——
+// 纯内存，TTL 45s；in-flight 去重（同一会话 Home → Works → Detail → Back 不重复请求相同数据）。
+// 不使用 localStorage（避免长期缓存正式作品数据）。
+// F5 / 后台修改后 A 刷新：TTL 到期或新会话重新向 Supabase 取最新（B 改动 A 立即同步）。
+const _publicCache = new Map(); // key -> { ts, data, inflight:Promise|null }
+const _PUBLIC_CACHE_TTL = 45000;
+
+// 公开摘要字段（首页 / 作品库均只取这些基础列，绝不 select * 触发 work_images / comic_pages 全量 hydrate）
+const PUBLIC_SUMMARY_COLS = [
+  'id', 'type', 'title', 'intro', 'year', 'stage', 'work_nature', 'tags', 'is_public',
+  'sort_order', 'home_featured', 'home_featured_order', 'works_pick', 'works_pick_order',
+  'display_size', 'cover_asset_id',
+];
+
 export class SupabaseWorkRepository extends WorkRepository {
   constructor(injectedClient = null) {
     super();
@@ -61,6 +75,29 @@ export class SupabaseWorkRepository extends WorkRepository {
   async _client() {
     if (!this._sb) this._sb = await getSupabase();
     return this._sb;
+  }
+
+  // —— FINAL16.2-A：会话内缓存 + in-flight 去重 ——
+  // 同一 key 在 TTL 内返回缓存；并发请求复用同一 in-flight Promise（不重复发请求）。
+  async _cached(key, loader) {
+    const now = Date.now();
+    const hit = _publicCache.get(key);
+    if (hit) {
+      if (hit.inflight) return hit.inflight;
+      if (now - hit.ts < _PUBLIC_CACHE_TTL) return hit.data;
+    }
+    const p = (async () => {
+      try {
+        const data = await loader();
+        _publicCache.set(key, { ts: Date.now(), data, inflight: null });
+        return data;
+      } catch (e) {
+        _publicCache.delete(key);
+        throw e;
+      }
+    })();
+    _publicCache.set(key, { ts: now, data: null, inflight: p });
+    return p;
   }
 
   /**
@@ -185,7 +222,9 @@ export class SupabaseWorkRepository extends WorkRepository {
     return '';
   }
 
-  async _mapWorkRow(row, mediaMap) {
+  // 同步映射（无 await 内部；保持同步以兼容 getHomePayload/listPublicSummary 的同步 .map()，
+  // 同时 _hydrateWorks 的 `await this._mapWorkRow(...)` 对同步函数同样安全）。
+  _mapWorkRow(row, mediaMap) {
     const coverMedia = mediaMap.get(row.cover_asset_id);
     const cover = this._assetDisplayUrl(coverMedia);
     const coverW = coverMedia?.originalWidth || null;
@@ -401,12 +440,125 @@ export class SupabaseWorkRepository extends WorkRepository {
     return [...list, ...clist];
   }
 
-  /** P0-10：仅读取某漫画的有序页（id / order / 图片预览），不触发 works / work_images 全量 hydrate。 */
-  async _readComicPagesOrdered(comicId) {
+  /**
+   * FINAL16.2-A：首页轻量摘要。
+   * 只读取「公开作品基础字段 + 封面」+ spotlight 漫画前 3 内页；
+   * 绝不 hydrate 全站 work_images / 110 张 comic_pages（仅取 1 部 featured 漫画的前 3 页）。
+   * 会话内缓存 + in-flight 去重。
+   * @returns {Promise<{works:Object[], certs:Object[]}>}
+   *   works：公开非证书作品（基础字段 + 封面 + coverW/coverH；images=[]、pages=[]，
+   *          仅 spotlight 漫画的 pages 含前 3 内页）。
+   *   certs ：全部证书（基础字段 + 封面），由调用方按 public 过滤。
+   */
+  async getHomePayload() {
+    return this._cached('home', async () => {
+      const sb = await this._client();
+      const { data: rows, error } = await sb
+        .from('works')
+        .select(PUBLIC_SUMMARY_COLS.join(', '))
+        .eq('is_public', true)
+        .order('sort_order', { ascending: false });
+      if (error) throw new Error(`works 读取失败：${error.message}`);
+      const coverIds = (rows || []).map((r) => r.cover_asset_id).filter(Boolean);
+      const mediaMap = await this._resolveMedia(coverIds);
+      const works = (rows || []).map((r) => this._mapWorkRow(r, mediaMap));
+
+      // spotlight 漫画：home_featured 且 type=comic 中 home_featured_order 最小者，仅取前 3 内页
+      const featuredComics = works
+        .filter((w) => w.type === 'comic' && w.featured)
+        .sort((a, b) => (a.homeFeaturedOrder || 0) - (b.homeFeaturedOrder || 0));
+      const spotlight = featuredComics[0] || null;
+      if (spotlight) {
+        spotlight.pages = await this._readComicPagesOrdered(spotlight.id, 3);
+      }
+
+      const certs = await this._readCertificates();
+      return { works, certs };
+    });
+  }
+
+  /**
+   * FINAL16.2-A：作品库轻量摘要（按类型）。
+   * 只读取基础字段 + 封面；comic 额外附「代表页(首张) + 页数」，绝不解析 110 张漫画图片。
+   * type=''（默认全部页）返回全部公开作品基础 + 漫画代表页/页数，不展开全站媒体。
+   * 会话内缓存 + in-flight 去重。
+   * @param {string} [type] '' | 'illustration' | 'oil' | 'comic'
+   * @returns {Promise<Object[]>} 与 list() 同形状（images=[]；漫画 pages=[代表页] + pageCount）
+   */
+  async listPublicSummary(type) {
+    const cacheKey = `summary:${type || ''}`;
+    return this._cached(cacheKey, async () => {
+      const sb = await this._client();
+      const { data: rows, error } = await sb
+        .from('works')
+        .select(PUBLIC_SUMMARY_COLS.join(', '))
+        .eq('is_public', true)
+        .order('sort_order', { ascending: false });
+      if (error) throw new Error(`works 读取失败：${error.message}`);
+      const coverIds = (rows || []).map((r) => r.cover_asset_id).filter(Boolean);
+      const mediaMap = await this._resolveMedia(coverIds);
+      let works = (rows || []).map((r) => this._mapWorkRow(r, mediaMap));
+
+      // 漫画代表页 + 页数（仅当本视图需要漫画：type 为空或等于 comic）
+      const needComic = !type || type === 'comic';
+      if (needComic) {
+        const comics = works.filter((w) => w.type === 'comic');
+        if (comics.length) {
+          const comicIds = comics.map((c) => c.id);
+          const { data: pageRows, error: pe } = await sb
+            .from('comic_pages')
+            .select('id, work_id, media_asset_id, page_number, sort_order')
+            .in('work_id', comicIds)
+            .order('sort_order', { ascending: true });
+          if (pe) throw new Error(`comic_pages 读取失败：${pe.message}`);
+          // 仅解析「每部漫画首张代表页」的资产（绝不解析 110 张）
+          const byWork = new Map();
+          const repAssetIds = [];
+          for (const r of (pageRows || [])) {
+            if (!byWork.has(r.work_id)) byWork.set(r.work_id, []);
+            byWork.get(r.work_id).push(r);
+          }
+          for (const pr of byWork.values()) {
+            const rep = pr[0];
+            if (rep && rep.media_asset_id) repAssetIds.push(rep.media_asset_id);
+          }
+          const repMedia = await this._resolveMedia([...new Set(repAssetIds)]);
+          for (const c of comics) {
+            const pr = (byWork.get(c.id) || [])
+              .sort((a, b) => (a.sort_order || a.page_number) - (b.sort_order || b.page_number));
+            c.pageCount = pr.length;
+            const rep = pr[0];
+            if (rep) {
+              const m = repMedia.get(rep.media_asset_id);
+              c.pages = [{
+                id: rep.id,
+                order: rep.sort_order || rep.page_number || 1,
+                image: this._assetDisplayUrl(m),
+                bucket: m?.bucket || null,
+                path: m?.originalPath || null,
+                w: m?.originalWidth || null,
+                h: m?.originalHeight || null,
+              }].filter((p) => p.image);
+            } else {
+              c.pages = [];
+            }
+          }
+        }
+      }
+
+      if (type && type !== '') works = works.filter((w) => w.type === type);
+      return works;
+    });
+  }
+
+  /** P0-10：仅读取某漫画的有序页（id / order / 图片预览），不触发 works / work_images 全量 hydrate。
+   *  @param {number} [limit] 可选：只取前 N 页（首页 spotlight 仅取前 3 内页，避免 hydrate 整部漫画）。 */
+  async _readComicPagesOrdered(comicId, limit = null) {
     const sb = await this._client();
-    const { data: rows, error } = await sb
-      .from('comic_pages').select('id, media_asset_id, page_number, sort_order')
+    let q = sb.from('comic_pages').select('id, media_asset_id, page_number, sort_order')
       .eq('work_id', comicId).order('sort_order', { ascending: true });
+    if (limit != null) q = q.limit(limit);
+    const { data: rows, error } = await q;
     if (error) throw new Error(`漫画页读取失败：${error.message}`);
     const assetIds = (rows || []).map((r) => r.media_asset_id).filter(Boolean);
     const mediaMap = await this._resolveMedia(assetIds);
