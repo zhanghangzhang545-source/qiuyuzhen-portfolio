@@ -1,0 +1,40 @@
+name: Supabase Keep-Alive
+
+# Supabase 免费版项目连续 7 天无任何请求会自动暂停，
+# 导致前台出现 "Failed to fetch"。本定时任务每 3 天唤醒一次后端，
+# 留有充足余量，避免再次因为闲置而被暂停。
+on:
+  schedule:
+    # 每 3 天 UTC 03:00（北京时间 11:00）执行一次
+    - cron: '0 3 */3 * *'
+  # 允许在 GitHub Actions 页面手动点 "Run workflow" 立刻跑一次
+  workflow_dispatch:
+
+jobs:
+  ping:
+    name: Ping Supabase REST
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call works endpoint
+        env:
+          SUPABASE_URL: https://odaxfnupwtqkrgblzmat.supabase.co
+          # 这是前端公开的 publishable(anon) key，本就随页面下发，可安全放入 CI
+          SUPABASE_ANON_KEY: sb_publishable_ct_nXNFs8_AgH-PYU6hMFQ_IgXCw2Yv
+        run: |
+          set -e
+          code=$(curl -s -o /tmp/resp.json -w "%{http_code}" --max-time 30 \
+            "$SUPABASE_URL/rest/v1/works?select=id&limit=1" \
+            -H "apikey: $SUPABASE_ANON_KEY" \
+            -H "Authorization: Bearer $SUPABASE_ANON_KEY")
+          echo "HTTP status: $code"
+          echo "Response body:"
+          cat /tmp/resp.json
+          echo
+          if [ "$code" != "200" ]; then
+            echo "::error::Supabase 未返回 200（项目可能已暂停）。请到 dashboard 手动 Restore。"
+            exit 1
+          fi
+          if [ "$(cat /tmp/resp.json)" = "[]" ]; then
+            echo "::warning::接口返回 200 但数据为空，请确认数据表内容是否正常。"
+          fi
+          echo "Keep-alive ping OK"
