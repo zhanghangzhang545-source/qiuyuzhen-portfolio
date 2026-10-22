@@ -11,6 +11,12 @@ export class AuthProvider {
   async logout() {}
   isAuthed() { return false; }
   user() { return null; }
+  /** 找回密码①：发送重置邮件（仅正式 Supabase 模式支持） */
+  async requestPasswordReset(/* email */) { throw new Error('当前环境不支持找回密码'); }
+  /** 找回密码②：应用邮件链接带回的恢复会话（仅正式 Supabase 模式支持） */
+  async applyRecoverySession() { throw new Error('当前环境不支持找回密码'); }
+  /** 找回密码③：在恢复会话下设置新密码（仅正式 Supabase 模式支持） */
+  async updatePassword(/* newPassword */) { throw new Error('当前环境不支持找回密码'); }
 }
 
 export class MockAuth extends AuthProvider {

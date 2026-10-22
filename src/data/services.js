@@ -121,7 +121,9 @@ const REPO_METHODS = [
 ];
 // 注意：isAuthed / user 必须「同步」返回（后台多处用 if(auth.isAuthed()) 同步判断），
 // 因此不进入异步代理；改为同步委托到底层 impl（未就绪时返回 false/null）。
-const AUTH_METHODS = ['login', 'logout', 'ensureSession'];
+const AUTH_METHODS = ['login', 'logout', 'ensureSession',
+  // 找回密码三步（仅 Supabase 模式实现；Mock 继承基类显式抛「不支持」）
+  'requestPasswordReset', 'applyRecoverySession', 'updatePassword'];
 
 function buildRepo(mode) {
   if (mode === 'supabase') {

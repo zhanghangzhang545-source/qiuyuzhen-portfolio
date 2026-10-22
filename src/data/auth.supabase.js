@@ -17,6 +17,10 @@
 import { AuthProvider } from './auth.js';
 import { getSupabase } from './supabaseClient.js';
 
+// 邮件重置链接回跳后，main.js 把 URL 中的恢复令牌转存到这个 key（sessionStorage），
+// 随后路由到 #/admin/reset 由 applyRecoverySession() 消费。两处必须保持一致。
+export const RECOVERY_KEY = 'portfolio.auth.recovery.v1';
+
 export class SupabaseAuth extends AuthProvider {
   constructor() {
     super();
@@ -180,5 +184,75 @@ export class SupabaseAuth extends AuthProvider {
     // 启动 Auth 状态订阅：此后 token 过期/吊销/登出 都会实时撤权
     await this._subscribeAuth();
     return this._authorized;
+  }
+
+  /**
+   * 找回密码①：发送重置邮件。
+   * redirectTo 动态取当前站点地址（GitHub Pages 地址）；邮件链接经 Supabase 验证后
+   * 302 回跳到这里并附带恢复令牌（implicit 流程：令牌在 URL hash 里）。
+   * ⚠️ 前置条件：Supabase Dashboard → Authentication → URL Configuration 的
+   *    Site URL 必须配置为同一站点地址，否则回跳会落到 localhost（打不开）。
+   * 安全语义：无论邮箱是否存在都按成功返回（防账号枚举），文案由 UI 侧如实表达。
+   */
+  async requestPasswordReset(email) {
+    const sb = await this._client();
+    const redirectTo = `${location.origin}${location.pathname}`;
+    const { error } = await sb.auth.resetPasswordForEmail((email || '').trim(), { redirectTo });
+    if (error) throw new Error(error.message || '重置邮件发送失败');
+  }
+
+  /**
+   * 找回密码②：应用邮件链接带回的恢复会话。
+   * main.js 启动时已把 URL 中的恢复令牌转存 sessionStorage（RECOVERY_KEY）；
+   * 这里取出换成正式会话。链接过期/已使用 → 显式抛错（不静默）。
+   * @returns {Promise<{email: string}>}
+   */
+  async applyRecoverySession() {
+    let rawStash = null;
+    try { rawStash = sessionStorage.getItem(RECOVERY_KEY); } catch (_) { /* ignore */ }
+    if (!rawStash) {
+      throw new Error('链接无效或已被使用，请回到登录页重新发送重置邮件。');
+    }
+    // 令牌是一次性的，无论成败都只消费一次
+    try { sessionStorage.removeItem(RECOVERY_KEY); } catch (_) { /* ignore */ }
+    let payload = null;
+    try { payload = JSON.parse(rawStash); } catch (_) { payload = null; }
+    if (!payload || (!payload.code && !payload.access_token)) {
+      throw new Error('链接参数缺失，请回到登录页重新发送重置邮件。');
+    }
+    const sb = await this._client();
+    let error = null;
+    if (payload.code) {
+      // PKCE 流程（跨设备打开时无 code_verifier，多数会失败 → 走过期文案）
+      ({ error } = await sb.auth.exchangeCodeForSession(payload.code));
+    } else {
+      // implicit 流程（默认）：直接用 access_token + refresh_token 建立会话
+      ({ error } = await sb.auth.setSession({
+        access_token: payload.access_token,
+        refresh_token: payload.refresh_token || '',
+      }));
+    }
+    if (error) {
+      throw new Error('链接已过期或已被使用，请回到登录页重新发送重置邮件。');
+    }
+    const { data: { session } } = await sb.auth.getSession();
+    return { email: session?.user?.email || '' };
+  }
+
+  /**
+   * 找回密码③：在恢复会话下设置新密码。
+   * 成功后立即登出该恢复会话——用户用新密码重新登录，绝不留悬挂会话。
+   */
+  async updatePassword(newPassword) {
+    const sb = await this._client();
+    const { error } = await sb.auth.updateUser({ password: newPassword });
+    if (error) throw new Error(error.message || '设置新密码失败');
+    await sb.auth.signOut();
+    // 登出使授权世代失效：任何在途的异步 is_admin 结果都不得再写回授权态
+    this._authGen++;
+    this._user = null;
+    this._authorized = false;
+    this._sessionChecked = true;
+    this._cacheTs = Date.now();
   }
 }

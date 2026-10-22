@@ -9,12 +9,41 @@ import { workDetailView } from './ui/pages/workDetail.js';
 import { comicReaderView } from './ui/pages/comicReaderPage.js';
 import { aboutView } from './ui/pages/about.js';
 import { adminLoginView } from './ui/pages/admin/login.js';
+import { adminResetView } from './ui/pages/admin/reset.js';
 import { adminDashboardView } from './ui/pages/admin/dashboard.js';
 import { adminWorkEditView } from './ui/pages/admin/workEdit.js';
 import { adminComicPagesView } from './ui/pages/admin/comicPages.js';
 import { adminAboutView } from './ui/pages/admin/about.js';
 import { adminCertificateEditView } from './ui/pages/admin/certificateEdit.js';
 import { initDataLayer, auth, storage } from './data/services.js';
+import { RECOVERY_KEY } from './data/auth.supabase.js';
+
+// ============================================================
+// 找回密码回跳捕获：邮件重置链接 → Supabase verify → 302 回跳本站，
+// 恢复令牌附在 URL 上（implicit 流程在 hash：#access_token=...&type=recovery；
+// PKCE 兜底在 search：?code=...）。这里在路由启动前把令牌转存 sessionStorage，
+// 并用 replaceState 静默切到 #/admin/reset（不触发 hashchange，避免
+// 路由双渲染导致恢复令牌被消费两次 → 第二次报「链接已失效」）。
+// ============================================================
+function captureRecoveryRedirect() {
+  try {
+    const hash = location.hash || '';
+    const search = location.search || '';
+    if (hash.includes('type=recovery') && hash.includes('access_token=')) {
+      const p = new URLSearchParams(hash.slice(1));
+      sessionStorage.setItem(RECOVERY_KEY, JSON.stringify({
+        access_token: p.get('access_token'),
+        refresh_token: p.get('refresh_token') || '',
+      }));
+      history.replaceState(null, '', location.pathname + location.search + '#/admin/reset');
+    } else if (/[?&]code=/.test(search)) {
+      const code = new URLSearchParams(search).get('code');
+      sessionStorage.setItem(RECOVERY_KEY, JSON.stringify({ code }));
+      history.replaceState(null, '', location.pathname + '#/admin/reset');
+    }
+  } catch (_) { /* 捕获失败不影响正常启动 */ }
+}
+captureRecoveryRedirect();
 
 const routes = {
   '/': homeView,
@@ -25,6 +54,7 @@ const routes = {
   '/about': aboutView,
   '/admin': adminDashboardView,
   '/admin/login': adminLoginView,
+  '/admin/reset': adminResetView,
   '/admin/about': adminAboutView,
   '/admin/work/new': adminWorkEditView,
   '/admin/work/:id/edit': adminWorkEditView,
